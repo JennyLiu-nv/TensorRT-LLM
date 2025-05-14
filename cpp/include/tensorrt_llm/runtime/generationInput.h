@@ -106,21 +106,29 @@ public:
         TLLM_CHECK_WITH_INFO(static_cast<bool>(this->lengths), "Invalid lengths tensor");
     }
 
-    // mandatory parameters
+    //! Mandatory parameters
     SizeType32 endId;
     SizeType32 padId;
-    TensorPtr ids;     // [packedLength] or [batchSize, maxInputLength], on gpu
-    TensorPtr lengths; // [batchSize], on gpu
-    bool packed;       // indicates if ids are packed or padded to maxInputLength
+    //! [packedLength] or [batchSize, maxInputLength], on gpu
+    TensorPtr ids;
+    //! [batchSize], on gpu
+    TensorPtr lengths;
+    //! Indicates if ids are packed or padded to maxInputLength
+    bool packed;
 
-    // optional parameters
-    TensorPtr embeddingBias;                // [vocabSizePadded], on gpu
-    TensorPtr badWordsList;                 // [2, badWordsLength] or [batchSize, 2, badWordsLength], on gpu
-    TensorPtr stopWordsList;                // [batchSize, 2, stopWordsLength], on gpu
-    std::optional<SizeType32> maxNewTokens; // max number of tokens to generate
+    //! Optional parameters
+    //! [vocabSizePadded], on gpu
+    TensorPtr embeddingBias;
+    //! [2, badWordsLength] or [batchSize, 2, badWordsLength], on gpu
+    TensorPtr badWordsList;
+    //! [batchSize, 2, stopWordsLength], on gpu
+    TensorPtr stopWordsList;
+    //! // max number of tokens to generate
+    std::optional<SizeType32> maxNewTokens;
 
-    // Ptuning parameters
-    PromptTuningParams promptTuningParams; // See promptTuningParams.h for expected shapes
+    //! Ptuning parameters
+    //! See promptTuningParams.h for expected shapes
+    PromptTuningParams promptTuningParams;
 };
 
 class GenerationInput : public GenericGenerationInput<ITensor::SharedPtr, PromptTuningParams>

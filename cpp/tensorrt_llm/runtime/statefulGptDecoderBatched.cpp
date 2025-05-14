@@ -17,6 +17,7 @@
 #include "tensorrt_llm/runtime/statefulGptDecoderBatched.h"
 
 #include "tensorrt_llm/batch_manager/createNewDecoderRequests.h"
+#include "tensorrt_llm/common/assert.h"
 #include "tensorrt_llm/runtime/generationOutput.h"
 #include "tensorrt_llm/runtime/gptDecoderBatched.h"
 #include "tensorrt_llm/runtime/runtimeKernels.h"
@@ -70,10 +71,9 @@ SamplingConfig extractSamplingConfig(SamplingConfig const& batchSamplingConfig, 
 
 } // namespace
 
-StatefulGptDecoderBatched::StatefulGptDecoderBatched(
-    CudaStreamPtr stream, SpeculativeDecodingMode const& speculativeDecodingMode, nvinfer1::DataType dtype)
+StatefulGptDecoderBatched::StatefulGptDecoderBatched(CudaStreamPtr stream, nvinfer1::DataType dtype)
 {
-    mDecoder = std::make_unique<GptDecoderBatched>(stream, speculativeDecodingMode, dtype);
+    mDecoder = std::make_unique<GptDecoderBatched>(stream, SpeculativeDecodingMode::None(), dtype);
 
     auto constexpr nvSizeType = TRTDataType<SizeType32>::value;
 
@@ -86,16 +86,16 @@ StatefulGptDecoderBatched::StatefulGptDecoderBatched(
 
 StatefulGptDecoderBatched::~StatefulGptDecoderBatched() = default;
 
-void StatefulGptDecoderBatched::setup(tensorrt_llm::executor::DecodingMode const& mode, SizeType32 maxBatchSize,
+void StatefulGptDecoderBatched::setup(executor::DecodingMode const& mode, SizeType32 maxBatchSize,
     SizeType32 maxBeamWidth, SizeType32 maxAttentionWindow, SizeType32 sinkTokenLength, SizeType32 maxSequenceLength,
-    SizeType32 maxTokensPerStep, nvinfer1::DataType dtype, ModelConfig const& modelConfig,
-    WorldConfig const& worldConfig)
+    nvinfer1::DataType dtype, ModelConfig const& modelConfig, WorldConfig const& worldConfig)
 {
+    constexpr SizeType32 maxTokensPerStep = 1;
     mDecoder->setup(mode, maxBatchSize, maxBeamWidth, maxAttentionWindow, sinkTokenLength, maxSequenceLength,
         maxTokensPerStep, dtype, modelConfig, worldConfig);
 
     mBatchSlotsSetup->reshape(ITensor::makeShape({maxBatchSize}));
-    mBatchSlotsDecoder->reshape(ITensor::makeShape({maxTokensPerStep, maxBatchSize}));
+    mBatchSlotsDecoder->reshape(ITensor::makeShape({maxBatchSize}));
 }
 
 void StatefulGptDecoderBatched::newBatch(GenerationInput const& inputs, GenerationOutput const& outputs,
@@ -105,9 +105,10 @@ void StatefulGptDecoderBatched::newBatch(GenerationInput const& inputs, Generati
     // split batch into single requests
     auto const& inputLengths = inputs.lengths;
     mDecoder->getDecoderState().setActualBatchSize(inputLengths->getShape().d[0]);
-    mDecoder->getDecoderState().getJointDecodingInput().numDecodingEngineTokens.clear();
-    mDecoder->getDecoderState().getJointDecodingInput().numDecodingEngineTokens.resize(
-        mDecoder->getDecoderState().getActualBatchSize(), 1);
+    for (auto i = 0; i < mDecoder->getDecoderState().getActualBatchSize(); ++i)
+    {
+        mDecoder->getDecoderState().setNumDecodingEngineTokens(i, 1);
+    }
 
     auto const& jointOutputIdsShape = mDecoder->getDecoderState().getJointDecodingOutput().ids->getShape();
     auto const maxBatchSize = jointOutputIdsShape.d[0];
@@ -202,7 +203,7 @@ void StatefulGptDecoderBatched::forwardAsync(decoder::Output& output, decoder::I
     auto const& logitsShape = input.logits->getShape();
     auto const batchSize = logitsShape.d[0];
     auto constexpr singleRequest = 1;
-    std::vector<ITensor::SharedPtr> logits;
+    std::vector<ITensor::SharedConstPtr> logits;
     logits.reserve(batchSize);
     for (auto batchIdx = 0; batchIdx < batchSize; ++batchIdx)
     {
@@ -213,12 +214,20 @@ void StatefulGptDecoderBatched::forwardAsync(decoder::Output& output, decoder::I
     }
 
     decoder_batch::Input batchInput{logits};
-    batchInput.batchSlots = mBatchSlotsDecoder;
+    mBatchSlotsDecoder->resize(batchSize);
+    auto forwardBatchSlotsRange = BufferRange<SizeType32>(*mBatchSlotsDecoder);
+    std::iota(forwardBatchSlotsRange.begin(), forwardBatchSlotsRange.end(), 0);
+    batchInput.batchSlots = {mBatchSlotsDecoder};
+    batchInput.batchSlotsRequestOrder = mBatchSlotsDecoder;
+
     batchInput.cacheIndirection = input.cacheIndirection;
 
     decoder_batch::Output batchOutput;
     batchOutput.cacheIndirection = output.cacheIndirection;
-    batchOutput.sequenceLengths = output.sequenceLengths;
+    // WAR: use sequenceLengths of output instead of DecoderState
+    mDecoder->getDecoderState().getJointDecodingOutput().lengths = ITensor::view(output.sequenceLengths,
+        ITensor::makeShape(
+            {mDecoder->getDecoderState().getActualBatchSize(), mDecoder->getDecoderState().getMaxBeamWidth()}));
 
     mDecoderFinishEvent = mDecoder->forwardAsync(batchOutput, batchInput);
 
@@ -238,7 +247,7 @@ void StatefulGptDecoderBatched::forwardSync()
 {
     TLLM_LOG_TRACE("%s start", __PRETTY_FUNCTION__);
 
-    mDecoderFinishEvent->event.synchronize();
+    mDecoderFinishEvent.synchronize();
 
     // wait for mFinishedSum to be updated
     mForwardEvent.synchronize();
@@ -263,7 +272,7 @@ void StatefulGptDecoderBatched::finalize(SamplingConfig const& samplingConfig) c
     {
         auto slot = batchSlots[batchIdx];
         auto requestSamplingConfig = extractSamplingConfig(samplingConfig, slot);
-        auto event = mDecoder->finalize(slot, requestSamplingConfig, /*streaming*/ false);
+        auto event = mDecoder->finalize(mDecoder->getDecoderState(), slot, requestSamplingConfig, /*streaming*/ false);
     }
     TLLM_LOG_TRACE("%s stop", __PRETTY_FUNCTION__);
 }

@@ -25,7 +25,8 @@ from defs.trt_test_alternative import check_call
 @pytest.fixture(scope="module")
 def qwen2audio_example_root(llm_root, llm_venv):
     "Get qwen2audio example root"
-    example_root = os.path.join(llm_root, "examples", "qwen2audio")
+    example_root = os.path.join(llm_root, "examples", "models", "core",
+                                "qwen2audio")
     llm_venv.run_cmd([
         "-m", "pip", "install", "-r",
         os.path.join(example_root, "requirements.txt")
@@ -40,9 +41,6 @@ def test_llm_qwen2audio_single_gpu(qwen2audio_example_root, llm_qwen_model_root,
                                    llm_venv, engine_dir):
     "Build & run qwen2audio on 1 gpu."
     workspace = llm_venv.get_working_directory()
-
-    # https://nvbugs/5136784
-    llm_venv.run_cmd(['-m', 'pip', 'install', 'transformers==4.47.1'])
 
     print("Generate audio engine...")
     audio_engine_dir = f"{engine_dir}/audio"

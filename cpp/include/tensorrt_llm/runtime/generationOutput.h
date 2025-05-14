@@ -85,18 +85,23 @@ public:
         TLLM_CHECK_WITH_INFO(static_cast<bool>(this->lengths), "Invalid lengths tensor");
     }
 
-    // mandatory parameters
-    TensorPtr ids;     // [batchSize, beamWidth, maxInputLength + maxNewTokens]
-    TensorPtr lengths; // [batchSize, beamWidth]
+    //! Mandatory parameters
+    //! [batchSize, beamWidth, maxInputLength + maxNewTokens], on gpu
+    TensorPtr ids;
+    //! [batchSize, beamWidth], on gpu
+    TensorPtr lengths;
 
-    // optional parameters
-    TensorPtr cumLogProbs;      // [batchSize, beamWidth], must be float*, on gpu
-    TensorPtr logProbs;         // [batchSize, beamWidth, maxInputLength + maxNewTokens], must be float*, on gpu
-    TensorPtr contextLogits;    // [batch_size, max_input_length, vocab_size_padded], if packed, the shape will be
-                                // [packed_size, vocab_size_padded]
-    TensorPtr generationLogits; // [batch_size, beam_width, max_output_length, vocab_size_padded]
+    //! Optional parameters
+    //! [batchSize, beamWidth], on gpu
+    TensorPtr cumLogProbs;
+    //! [batchSize, beamWidth, maxInputLength + maxNewTokens], on gpu
+    TensorPtr logProbs;
+    //! // [packedSize, vocabSizePadded] if packed [batchSize, maxInputLength, vocabSizePadded] if not, on gpu
+    TensorPtr contextLogits;
+    //! // [batchSize, beamWidth, maxOutputLength, vocabSizePadded], on gpu
+    TensorPtr generationLogits;
 
-    // callbacks
+    //! Callbacks
     Callback onTokenGenerated;
 };
 

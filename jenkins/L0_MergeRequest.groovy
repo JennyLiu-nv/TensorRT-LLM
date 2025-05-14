@@ -21,10 +21,10 @@ UPLOAD_PATH = env.uploadPath ? env.uploadPath : "sw-tensorrt-generic/llm-artifac
 // Container configuration
 // available tags can be found in: https://urm.nvidia.com/artifactory/sw-tensorrt-docker/tensorrt-llm/
 // [base_image_name]-[arch]-[os](-[python_version])-[trt_version]-[torch_install_type]-[stage]-[date]-[mr_id]
-LLM_DOCKER_IMAGE = "urm-rn.nvidia.com/sw-tensorrt-docker/tensorrt-llm:pytorch-25.01-py3-x86_64-ubuntu24.04-trt10.8.0.43-skip-devel-202503131720-8877"
-LLM_SBSA_DOCKER_IMAGE = "urm-rn.nvidia.com/sw-tensorrt-docker/tensorrt-llm:pytorch-25.01-py3-aarch64-ubuntu24.04-trt10.8.0.43-skip-devel-202503131720-8877"
-LLM_ROCKYLINUX8_PY310_DOCKER_IMAGE = "urm-rn.nvidia.com/sw-tensorrt-docker/tensorrt-llm:cuda-12.8.0-devel-rocky8-x86_64-rocky8-py310-trt10.8.0.43-skip-devel-202503131720-8877"
-LLM_ROCKYLINUX8_PY312_DOCKER_IMAGE = "urm-rn.nvidia.com/sw-tensorrt-docker/tensorrt-llm:cuda-12.8.0-devel-rocky8-x86_64-rocky8-py312-trt10.8.0.43-skip-devel-202503131720-8877"
+LLM_DOCKER_IMAGE = "urm.nvidia.com/sw-tensorrt-docker/tensorrt-llm:pytorch-25.04-py3-x86_64-ubuntu24.04-trt10.10.0.31-skip-tritondevel-202505121727-4049"
+LLM_SBSA_DOCKER_IMAGE = "urm.nvidia.com/sw-tensorrt-docker/tensorrt-llm:pytorch-25.04-py3-aarch64-ubuntu24.04-trt10.10.0.31-skip-tritondevel-202505121727-4049"
+LLM_ROCKYLINUX8_PY310_DOCKER_IMAGE = "urm.nvidia.com/sw-tensorrt-docker/tensorrt-llm:cuda-12.9.0-devel-rocky8-x86_64-rocky8-py310-trt10.10.0.31-skip-tritondevel-202505121727-4049"
+LLM_ROCKYLINUX8_PY312_DOCKER_IMAGE = "urm.nvidia.com/sw-tensorrt-docker/tensorrt-llm:cuda-12.9.0-devel-rocky8-x86_64-rocky8-py312-trt10.10.0.31-skip-tritondevel-202505121727-4049"
 
 LLM_ROCKYLINUX8_DOCKER_IMAGE = LLM_ROCKYLINUX8_PY310_DOCKER_IMAGE
 
@@ -79,6 +79,8 @@ def TEST_STAGE_LIST = "stage_list"
 @Field
 def GPU_TYPE_LIST = "gpu_type"
 @Field
+def TEST_BACKEND = "test_backend"
+@Field
 def IS_POST_MERGE = "post_merge"
 @Field
 def ADD_MULTI_GPU_TEST = "add_multi_gpu_test"
@@ -92,27 +94,51 @@ def DISABLE_MULTI_GPU_TEST = "disable_multi_gpu_test"
 def EXTRA_STAGE_LIST = "extra_stage"
 @Field
 def MULTI_GPU_FILE_CHANGED = "multi_gpu_file_changed"
+@Field
+def ONLY_PYTORCH_FILE_CHANGED = "only_pytorch_file_changed"
+@Field
+def AUTO_TRIGGER_TAG_LIST = "auto_trigger_tag_list"
+@Field
+def DEBUG_MODE = "debug"
+
 def testFilter = [
     (REUSE_STAGE_LIST): trimForStageList(gitlabParamsFromBot.get(REUSE_STAGE_LIST, null)?.tokenize(',')),
     (ENABLE_SKIP_TEST): gitlabParamsFromBot.get((ENABLE_SKIP_TEST), false),
     (TEST_STAGE_LIST): trimForStageList(gitlabParamsFromBot.get((TEST_STAGE_LIST), null)?.tokenize(',')),
     (GPU_TYPE_LIST): trimForStageList(gitlabParamsFromBot.get((GPU_TYPE_LIST), null)?.tokenize(',')),
+    (TEST_BACKEND): trimForStageList(gitlabParamsFromBot.get((TEST_BACKEND), null)?.tokenize(',')),
     (IS_POST_MERGE): (env.JOB_NAME ==~ /.*PostMerge.*/) || gitlabParamsFromBot.get((IS_POST_MERGE), false),
     (ADD_MULTI_GPU_TEST): gitlabParamsFromBot.get((ADD_MULTI_GPU_TEST), false),
     (ONLY_MULTI_GPU_TEST): gitlabParamsFromBot.get((ONLY_MULTI_GPU_TEST), false) || gitlabParamsFromBot.get((ENABLE_MULTI_GPU_TEST), false),
     (DISABLE_MULTI_GPU_TEST): gitlabParamsFromBot.get((DISABLE_MULTI_GPU_TEST), false),
     (EXTRA_STAGE_LIST): trimForStageList(gitlabParamsFromBot.get((EXTRA_STAGE_LIST), null)?.tokenize(',')),
     (MULTI_GPU_FILE_CHANGED): false,
+    (ONLY_PYTORCH_FILE_CHANGED): false,
+    (DEBUG_MODE): gitlabParamsFromBot.get(DEBUG_MODE, false),
+    (AUTO_TRIGGER_TAG_LIST): [],
 ]
 
 String reuseBuild = gitlabParamsFromBot.get('reuse_build', null)
+
+@Field
+def GITHUB_PR_API_URL = "github_pr_api_url"
+@Field
+def CACHED_CHANGED_FILE_LIST = "cached_changed_file_list"
+@Field
+def ACTION_INFO = "action_info"
+def globalVars = [
+    (GITHUB_PR_API_URL): gitlabParamsFromBot.get('github_pr_api_url', null),
+    (CACHED_CHANGED_FILE_LIST): null,
+    (ACTION_INFO): gitlabParamsFromBot.get('action_info', null),
+]
 
 // If not running all test stages in the L0 pre-merge, we will not update the GitLab status at the end.
 boolean enableUpdateGitlabStatus =
     !testFilter[ENABLE_SKIP_TEST] &&
     !testFilter[ONLY_MULTI_GPU_TEST] &&
     testFilter[GPU_TYPE_LIST] == null &&
-    testFilter[TEST_STAGE_LIST] == null
+    testFilter[TEST_STAGE_LIST] == null &&
+    testFilter[TEST_BACKEND] == null
 
 String getShortenedJobName(String path)
 {
@@ -160,7 +186,7 @@ def createKubernetesPodConfig(image, type)
     case "agent":
         containerConfig = """
                   - name: alpine
-                    image: urm-rn.nvidia.com/docker/alpine:latest
+                    image: urm.nvidia.com/docker/alpine:latest
                     command: ['cat']
                     tty: true
                     resources:
@@ -246,7 +272,7 @@ def createKubernetesPodConfig(image, type)
                         fieldRef:
                           fieldPath: spec.nodeName
                   - name: jnlp
-                    image: urm-rn.nvidia.com/docker/jenkins/inbound-agent:4.11-1-jdk11
+                    image: urm.nvidia.com/docker/jenkins/inbound-agent:4.11-1-jdk11
                     args: ['\$(JENKINS_SECRET)', '\$(JENKINS_NAME)']
                     resources:
                       requests:
@@ -276,7 +302,7 @@ def echoNodeAndGpuInfo(pipeline, stageName)
     pipeline.echo "HOST_NODE_NAME = ${hostNodeName} ; GPU_UUIDS = ${gpuUuids} ; STAGE_NAME = ${stageName}"
 }
 
-def setupPipelineEnvironment(pipeline, testFilter)
+def setupPipelineEnvironment(pipeline, testFilter, globalVars)
 {
     setupPipelineSpec = createKubernetesPodConfig(LLM_DOCKER_IMAGE, "build")
     trtllm_utils.launchKubernetesPod(pipeline, setupPipelineSpec, "trt-llm", {
@@ -294,7 +320,9 @@ def setupPipelineEnvironment(pipeline, testFilter)
         }
         echo "Env.gitlabMergeRequestLastCommit: ${env.gitlabMergeRequestLastCommit}."
         echo "Freeze GitLab commit. Branch: ${env.gitlabBranch}. Commit: ${env.gitlabCommit}."
-        testFilter[(MULTI_GPU_FILE_CHANGED)] = getMultiGpuFileChanged(pipeline, testFilter)
+        testFilter[(MULTI_GPU_FILE_CHANGED)] = getMultiGpuFileChanged(pipeline, testFilter, globalVars)
+        testFilter[(ONLY_PYTORCH_FILE_CHANGED)] = getOnlyPytorchFileChanged(pipeline, testFilter, globalVars)
+        testFilter[(AUTO_TRIGGER_TAG_LIST)] = getAutoTriggerTagList(pipeline, testFilter, globalVars)
     })
 }
 
@@ -309,13 +337,7 @@ def launchReleaseCheck(pipeline)
         // Step 1: cloning tekit source code
         trtllm_utils.checkoutSource(LLM_REPO, env.gitlabCommit, LLM_ROOT, true, true)
         sh "cd ${LLM_ROOT} && git config --unset-all core.hooksPath"
-        trtllm_utils.llmExecStepWithRetry(pipeline, script: "cd ${LLM_ROOT} && pip3 install `grep pre-commit requirements-dev.txt`")
-        trtllm_utils.llmExecStepWithRetry(pipeline, script: "cd ${LLM_ROOT} && pip3 install `grep bandit requirements-dev.txt`")
-        trtllm_utils.llmExecStepWithRetry(pipeline, script: "cd ${LLM_ROOT} && pre-commit install")
-        trtllm_utils.llmExecStepWithRetry(pipeline, script: "cd ${LLM_ROOT} && pre-commit run -a --show-diff-on-failure || (git restore . && false)")
-        sh "cd ${LLM_ROOT} && bandit --configfile scripts/bandit.yaml -r tensorrt_llm | tee /tmp/bandit.log"
-        sh "cat /tmp/bandit.log | grep -q 'Total lines skipped (#nosec): 0' && exit 0 || exit 1"
-        sh "cat /tmp/bandit.log | grep -q 'Issue:' && exit 1 || exit 0"
+        trtllm_utils.llmExecStepWithRetry(pipeline, script: "cd ${LLM_ROOT} && python3 -u scripts/release_check.py || (git restore . && false)")
 
         // Step 2: build tools
         withEnv(['GONOSUMDB=*.nvidia.com']) {
@@ -336,7 +358,7 @@ def launchReleaseCheck(pipeline)
         sh "cd ${LLM_ROOT}/cpp && /go/bin/license_checker -config ../jenkins/license_cpp.json include tensorrt_llm"
     }
 
-    def image = "urm-rn.nvidia.com/docker/golang:1.22"
+    def image = "urm.nvidia.com/docker/golang:1.22"
     stageName = "Release Check"
     trtllm_utils.launchKubernetesPod(pipeline, createKubernetesPodConfig(image, "build"), "trt-llm", {
         stage("[${stageName}] Run") {
@@ -364,7 +386,7 @@ def launchReleaseCheck(pipeline)
     })
 }
 
-def getMergeRequestChangedFileList(pipeline) {
+def getMergeRequestChangedFileListGitlab(pipeline) {
     def changedFileList = []
     def pageId = 0
     withCredentials([
@@ -378,7 +400,10 @@ def getMergeRequestChangedFileList(pipeline) {
         while(true) {
             pageId += 1
             def rawDataJson = pipeline.sh(
-                script: "curl --header \"PRIVATE-TOKEN: $GITLAB_API_TOKEN\" --url \"https://${DEFAULT_GIT_URL}/api/v4/projects/${env.gitlabMergeRequestTargetProjectId}/merge_requests/${env.gitlabMergeRequestIid}/diffs?page=${pageId}&per_page=20\"",
+                script: """
+                    curl --header "PRIVATE-TOKEN: $GITLAB_API_TOKEN" \
+                         --url "https://${DEFAULT_GIT_URL}/api/v4/projects/${env.gitlabMergeRequestTargetProjectId}/merge_requests/${env.gitlabMergeRequestIid}/diffs?page=${pageId}&per_page=20"
+                """,
                 returnStdout: true
             )
             def rawDataList = readJSON text: rawDataJson, returnPojo: true
@@ -393,7 +418,94 @@ def getMergeRequestChangedFileList(pipeline) {
     return changedFileList
 }
 
-def getMultiGpuFileChanged(pipeline, testFilter)
+def getMergeRequestChangedFileListGithub(pipeline, githubPrApiUrl) {
+    def changedFileList = []
+    def pageId = 0
+    withCredentials([
+        string(
+            credentialsId: 'github-token-trtllm-ci',
+            variable: 'GITHUB_API_TOKEN'
+        ),
+    ]) {
+        while(true) {
+            pageId += 1
+            def rawDataJson = pipeline.sh(
+                script: """
+                    curl --header "Authorization: Bearer $GITHUB_API_TOKEN" \
+                         --url "${githubPrApiUrl}/files?page=${pageId}&per_page=20"
+                """,
+                returnStdout: true
+            )
+            echo "rawDataJson: ${rawDataJson}"
+            def rawDataList = readJSON text: rawDataJson, returnPojo: true
+            rawDataList.each { rawData ->
+                changedFileList += [rawData.get("filename"), rawData.get("previous_filename")].findAll { it }
+            }
+            if (!rawDataList) { break }
+        }
+    }
+    def changedFileListStr = changedFileList.join(",\n")
+    pipeline.echo("The changeset of this PR is: ${changedFileListStr}.")
+    return changedFileList
+}
+
+def getMergeRequestChangedFileList(pipeline, globalVars) {
+    def isOfficialPostMergeJob = (env.JOB_NAME ==~ /.*PostMerge.*/)
+    if (env.alternativeTRT || isOfficialPostMergeJob) {
+        pipeline.echo("Force set changed file list to empty list.")
+        return []
+    }
+
+    def githubPrApiUrl = globalVars[GITHUB_PR_API_URL]
+
+    if (globalVars[CACHED_CHANGED_FILE_LIST] != null) {
+        return globalVars[CACHED_CHANGED_FILE_LIST]
+    }
+    try {
+        if (githubPrApiUrl != null) {
+            globalVars[CACHED_CHANGED_FILE_LIST] = getMergeRequestChangedFileListGithub(pipeline, githubPrApiUrl)
+        } else {
+            globalVars[CACHED_CHANGED_FILE_LIST] = getMergeRequestChangedFileListGitlab(pipeline)
+        }
+        return globalVars[CACHED_CHANGED_FILE_LIST]
+    } catch (InterruptedException e) {
+        throw e
+    } catch (Exception e) {
+        pipeline.echo("Get merge request changed file list failed. Error: ${e.toString()}")
+        globalVars[CACHED_CHANGED_FILE_LIST] = []
+        return globalVars[CACHED_CHANGED_FILE_LIST]
+    }
+}
+
+def getAutoTriggerTagList(pipeline, testFilter, globalVars) {
+    def autoTriggerTagList = []
+    def isOfficialPostMergeJob = (env.JOB_NAME ==~ /.*PostMerge.*/)
+    if (env.alternativeTRT || isOfficialPostMergeJob) {
+        pipeline.echo("Force set auto trigger tags to empty list.")
+        return autoTriggerTagList
+    }
+    def changedFileList = getMergeRequestChangedFileList(pipeline, globalVars)
+    if (!changedFileList || changedFileList.isEmpty()) {
+        return autoTriggerTagList
+    }
+    def specialFileToTagMap = [
+        "tensorrt_llm/_torch/models/modeling_deepseekv3.py": ["-DeepSeek-"],
+    ]
+    for (file in changedFileList) {
+        for (String key : specialFileToTagMap.keySet()) {
+            if (file.startsWith(key)) {
+                autoTriggerTagList += specialFileToTagMap[key]
+            }
+        }
+    }
+    autoTriggerTagList = autoTriggerTagList.unique()
+    if (!autoTriggerTagList.isEmpty()) {
+        pipeline.echo("Auto trigger tags detected: ${autoTriggerTagList.join(', ')}")
+    }
+    return autoTriggerTagList
+}
+
+def getMultiGpuFileChanged(pipeline, testFilter, globalVars)
 {
     if (testFilter[(DISABLE_MULTI_GPU_TEST)]) {
         pipeline.echo("Force not run multi-GPU testing.")
@@ -443,25 +555,37 @@ def getMultiGpuFileChanged(pipeline, testFilter)
         "tensorrt_llm/functional.py",
         "tensorrt_llm/mapping.py",
         "tensorrt_llm/llmapi/",
-        "tensorrt_llm/executor.py",
+        "tensorrt_llm/executor/",
         "tensorrt_llm/_ipc_utils.py",
         "tensorrt_llm/parameter.py",
         "tensorrt_llm/models/llama/",
         "tensorrt_llm/_torch/compilation/patterns/ar_residual_norm.py",
         "tensorrt_llm/_torch/compilation/patterns/ub_allreduce.py",
         "tensorrt_llm/_torch/custom_ops/userbuffers_custom_ops.py",
+        "tensorrt_llm/_torch/pyexecutor/py_executor.py",
+        "tensorrt_llm/_torch/pyexecutor/_util.py",
+        "tensorrt_llm/_torch/models/modeling_llama.py",
+        "tests/integration/defs/cpp/test_multi_gpu.py",
         "tests/integration/test_lists/test-db/l0_dgx_h100.yml",
+        "tests/integration/test_lists/test-db/l0_dgx_h200.yml",
         "tests/unittest/_torch/multi_gpu/",
         "tests/unittest/_torch/multi_gpu_modeling/",
+        "tests/unittest/llmapi/test_llm_multi_gpu.py",
+        "tests/unittest/llmapi/test_llm_multi_gpu_pytorch.py",
         "jenkins/L0_Test.groovy",
     ]
 
-    def changedFileList = ","
+    def changedFileList = getMergeRequestChangedFileList(pipeline, globalVars)
+    if (!changedFileList || changedFileList.isEmpty()) {
+        return false
+    }
+
+    def changedFileListStr = ","
     def relatedFileChanged = false
     try {
-        changedFileList = getMergeRequestChangedFileList(pipeline).join(", ")
+        changedFileListStr = changedFileList.join(", ")
         relatedFileChanged = relatedFileList.any { it ->
-            if (changedFileList.contains(it)) {
+            if (changedFileListStr.contains(it)) {
                 return true
             }
         }
@@ -472,12 +596,60 @@ def getMultiGpuFileChanged(pipeline, testFilter)
     }
     catch (Exception e)
     {
-        pipeline.echo("getMultiGpuFileChanged failed execution.")
+        pipeline.echo("getMultiGpuFileChanged failed execution. Error: ${e.toString()}")
     }
     if (relatedFileChanged) {
         pipeline.echo("Detect multi-GPU related files changed.")
     }
     return relatedFileChanged
+}
+
+def getOnlyPytorchFileChanged(pipeline, testFilter, globalVars) {
+    def isOfficialPostMergeJob = (env.JOB_NAME ==~ /.*PostMerge.*/)
+    if (env.alternativeTRT || isOfficialPostMergeJob) {
+        pipeline.echo("Force set ONLY_PYTORCH_FILE_CHANGED false.")
+        return false
+    }
+    def pytorchOnlyList = [
+        "tensorrt_llm/_torch/",
+        "tensorrt_llm/scaffolding/",
+        "tests/unittest/_torch/",
+        "tests/unittest/scaffolding/",
+        "tests/unittest/llmapi/test_llm_pytorch.py",
+        "tests/unittest/llmapi/test_llm_multi_gpu_pytorch.py",
+        "tests/integration/defs/accuracy/test_llm_api_pytorch.py",
+        "tests/integration/defs/disaggregated/",
+        "examples/auto_deploy",
+        "examples/disaggregated",
+        "examples/pytorch/",
+        "examples/scaffolding/",
+        "docs/"
+    ]
+
+    def changedFileList = getMergeRequestChangedFileList(pipeline, globalVars)
+
+    if (!changedFileList || changedFileList.isEmpty()) {
+        return false
+    }
+
+    def result = true
+    for (file in changedFileList) {
+        def isPytorchFile = false
+        for (prefix in pytorchOnlyList) {
+            if (file.startsWith(prefix)) {
+                isPytorchFile = true
+                break
+            }
+        }
+        if (!isPytorchFile) {
+            pipeline.echo("Found non-PyTorch file: ${file}")
+            result = false
+            break
+        }
+    }
+
+    pipeline.echo("Only PyTorch files changed: ${result}")
+    return result
 }
 
 def collectTestResults(pipeline, testFilter)
@@ -490,6 +662,7 @@ def collectTestResults(pipeline, testFilter)
             testResultLink = "https://urm.nvidia.com/artifactory/sw-tensorrt-generic/llm-artifacts/${JOB_NAME}/${BUILD_NUMBER}/test-results"
 
             trtllm_utils.llmExecStepWithRetry(pipeline, script: "apk add --no-cache curl")
+            trtllm_utils.llmExecStepWithRetry(pipeline, script: "apk add python3")
             trtllm_utils.llmExecStepWithRetry(pipeline, script: "wget ${testResultLink}/", allowStepFailed: true)
             sh "cat index.html | grep \"tar.gz\" | cut -d \"\\\"\" -f 2 > result_file_names.txt"
             sh "cat result_file_names.txt"
@@ -500,6 +673,16 @@ def collectTestResults(pipeline, testFilter)
             echo "Result File Number: ${resultFileNumber}, Downloaded: ${resultFileDownloadedNumber}"
 
             sh "find . -name results-\\*.tar.gz -type f -exec tar -zxvf {} \\; || true"
+            trtllm_utils.checkoutSource(LLM_REPO, env.gitlabCommit, LLM_ROOT, true, true)
+            if (testFilter[(IS_POST_MERGE)]) {
+                try {
+                    sh "python3 llm/scripts/generate_duration.py --duration-file=new_test_duration.json"
+                    trtllm_utils.uploadArtifacts("new_test_duration.json", "${UPLOAD_PATH}/test-results/")
+                } catch (Exception e) {
+                    // No need to fail the stage if the duration file generation fails
+                    echo "An error occurred while generating or uploading the duration file: ${e.toString()}"
+                }
+            }
 
             junit(testResults: '**/results*.xml', allowEmptyResults : true)
         } // Collect test result stage
@@ -516,13 +699,11 @@ def collectTestResults(pipeline, testFilter)
                     echo "Test coverage is skipped because there is no test data file."
                     return
                 }
-                trtllm_utils.llmExecStepWithRetry(pipeline, script: "apk add python3")
                 trtllm_utils.llmExecStepWithRetry(pipeline, script: "apk add py3-pip")
                 trtllm_utils.llmExecStepWithRetry(pipeline, script: "pip3 config set global.break-system-packages true")
                 trtllm_utils.llmExecStepWithRetry(pipeline, script: "pip3 install coverage")
                 sh "coverage --version"
 
-                trtllm_utils.checkoutSource(LLM_REPO, env.gitlabCommit, LLM_ROOT, true, true)
                 sh "cp llm/examples/openai_triton/manual_plugin/fmha_triton.py llm/examples/openai_triton/plugin_autogen/"
                 def coverageConfigFile = "cov/.coveragerc"
                 sh """
@@ -590,7 +771,7 @@ def triggerJob(jobName, parameters, jenkinsUrl = "", credentials = "")
     return status
 }
 
-def launchStages(pipeline, reuseBuild, testFilter, enableFailFast)
+def launchStages(pipeline, reuseBuild, testFilter, enableFailFast, globalVars)
 {
     stages = [
         "Release Check": {
@@ -602,10 +783,12 @@ def launchStages(pipeline, reuseBuild, testFilter, enableFailFast)
             script {
                 stage("Build") {
                     def parameters = getCommonParameters()
+                    String globalVarsJson = writeJSON returnText: true, json: globalVars
                     parameters += [
                         'enableFailFast': enableFailFast,
                         'dockerImage': LLM_DOCKER_IMAGE,
                         'wheelDockerImage': LLM_ROCKYLINUX8_DOCKER_IMAGE,
+                        'globalVars': globalVarsJson,
                     ]
 
                     if (env.alternativeTRT) {
@@ -639,10 +822,12 @@ def launchStages(pipeline, reuseBuild, testFilter, enableFailFast)
                         parameters = getCommonParameters()
 
                         String testFilterJson = writeJSON returnText: true, json: testFilter
+                        String globalVarsJson = writeJSON returnText: true, json: globalVars
                         parameters += [
                             'enableFailFast': enableFailFast,
                             'testFilter': testFilterJson,
                             'dockerImage': LLM_DOCKER_IMAGE,
+                            'globalVars': globalVarsJson,
                         ]
 
                         if (env.alternativeTRT) {
@@ -695,9 +880,11 @@ def launchStages(pipeline, reuseBuild, testFilter, enableFailFast)
                 def stageName = "Build"
                 stage(stageName) {
                     def parameters = getCommonParameters()
+                    String globalVarsJson = writeJSON returnText: true, json: globalVars
                     parameters += [
                         'enableFailFast': enableFailFast,
                         "dockerImage": LLM_SBSA_DOCKER_IMAGE,
+                        'globalVars': globalVarsJson,
                     ]
 
                     if (env.alternativeTrtSBSA) {
@@ -732,10 +919,12 @@ def launchStages(pipeline, reuseBuild, testFilter, enableFailFast)
                         def parameters = getCommonParameters()
 
                         String testFilterJson = writeJSON returnText: true, json: testFilter
+                        String globalVarsJson = writeJSON returnText: true, json: globalVars
                         parameters += [
                             'enableFailFast': enableFailFast,
                             'testFilter': testFilterJson,
                             "dockerImage": LLM_SBSA_DOCKER_IMAGE,
+                            'globalVars': globalVarsJson,
                         ]
 
                         if (env.alternativeTrtSBSA) {
@@ -829,7 +1018,9 @@ pipeline {
             steps
             {
                 script {
-                    setupPipelineEnvironment(this, testFilter)
+                    setupPipelineEnvironment(this, testFilter, globalVars)
+                    println globalVars
+                    globalVars[ACTION_INFO] = trtllm_utils.setupPipelineDescription(this, globalVars[ACTION_INFO])
                     echo "enableFailFast is: ${enableFailFast}"
                     echo "env.gitlabTriggerPhrase is: ${env.gitlabTriggerPhrase}"
                     println testFilter
@@ -847,7 +1038,10 @@ pipeline {
                             }
                         }
                     } else {
-                        launchStages(this, reuseBuild, testFilter, enableFailFast)
+                        // globalVars[CACHED_CHANGED_FILE_LIST] is only used in setupPipelineEnvironment
+                        // Reset it to null to workaround the "Argument list too long" error
+                        globalVars[CACHED_CHANGED_FILE_LIST] = null
+                        launchStages(this, reuseBuild, testFilter, enableFailFast, globalVars)
                     }
                 }
             }

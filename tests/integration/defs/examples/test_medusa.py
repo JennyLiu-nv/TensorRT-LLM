@@ -16,7 +16,8 @@
 import os
 
 import pytest
-from defs.common import convert_weights, generate_dummy_medusa, venv_check_call
+from defs.common import (convert_weights, get_dummy_spec_decoding_heads,
+                         venv_check_call)
 from defs.conftest import skip_fp8_pre_ada
 from defs.trt_test_alternative import check_call
 
@@ -201,10 +202,10 @@ def test_with_dummy_medusa(hf_model_root, medusa_example_root, llm_venv,
                            cmodel_dir, engine_dir, batch_size, data_type,
                            num_medusa_heads, use_py_session, model_type):
     print("Creating dummy Medusa heads...")
-    generate_dummy_medusa(hf_model_dir=hf_model_root,
-                          save_dir=llm_venv.get_working_directory(),
-                          mode='medusa',
-                          num_heads=num_medusa_heads)
+    get_dummy_spec_decoding_heads(hf_model_dir=hf_model_root,
+                                  save_dir=llm_venv.get_working_directory(),
+                                  mode='medusa',
+                                  num_heads=num_medusa_heads)
 
     print("Converting to TRTLLM checkpoints...")
     model_name = model_type + "_medusa"
@@ -251,6 +252,7 @@ def test_with_dummy_medusa(hf_model_root, medusa_example_root, llm_venv,
     venv_check_call(llm_venv, run_cmd)
 
 
+@pytest.mark.skip(reason="https://nvbugs/5219534")
 @pytest.mark.parametrize("llama_model_root",
                          ['llama-v2-7b-hf', 'llama-3.1-8b', 'llama-3.2-1b'],
                          indirect=True)
@@ -278,6 +280,7 @@ def test_llama_medusa_1gpu(llama_model_root,
                            model_type='llama')
 
 
+@pytest.mark.skip(reason="https://nvbugs/5219534")
 @pytest.mark.parametrize("code_llama_model_root", ['CodeLlama-7b-Instruct'],
                          indirect=True)
 def test_codellama_medusa_1gpu(code_llama_model_root,
@@ -361,7 +364,7 @@ def test_qwen_medusa_1gpu(llm_qwen_model_root,
 
 @pytest.mark.parametrize("llm_phi_model_root", [
     "phi-2", "Phi-3-mini-128k-instruct", "Phi-3-small-128k-instruct",
-    "Phi-3.5-mini-instruct"
+    "Phi-3.5-mini-instruct", "Phi-4-mini-instruct"
 ],
                          indirect=True)
 def test_phi_medusa_1gpu(llm_phi_model_root,
