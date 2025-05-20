@@ -77,7 +77,7 @@ perf/test_perf.py::test_perf[llama_v3.1_nemotron_nano_8b-bench-pytorch-bfloat16-
 perf/test_perf.py::test_perf[llama_v3.1_nemotron_nano_8b-bench-pytorch-bfloat16-maxbs:4-input_output_len:128,128-loras:4]
 perf/test_perf.py::test_perf[llama_v3.1_nemotron_nano_8b-bench-pytorch-bfloat16-maxbs:2-input_output_len:512,32-loras:2]
 
-# FP4/FP8 Quantization Performance Tests
+# meta/llama-3_1-8b-instruct FP4/FP8 Quantization Performance Tests
 # FP4 Tests
 perf/test_perf.py::test_perf[llama_v3.1_8b_fp4-bench-float16-input_output_len:128,128-quant:nvfp4]
 perf/test_perf.py::test_perf[llama_v3.1_8b_fp4-bench-float16-input_output_len:512,32-quant:nvfp4]
@@ -128,3 +128,34 @@ perf/test_perf.py::test_perf[llama_v3.1_8b_instruct_fp8-bench-pytorch-float16-in
 perf/test_perf.py::test_perf[llama_v3.1_8b-bench-streaming-float16-input_output_len:128,128]
 perf/test_perf.py::test_perf[llama_v3.1_8b_fp4-bench-streaming-float16-input_output_len:128,128-quant:nvfp4]
 perf/test_perf.py::test_perf[llama_v3.1_8b_instruct_fp8-bench-streaming-float16-input_output_len:128,128-quant:fp8]
+
+# Llama-3.3-70B-Instruct Performance Tests (Single GPU only)
+# Basic FP4/FP8 tests
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct-bench-float16-input_output_len:128,128]
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct_fp4-bench-float16-input_output_len:128,128-quant:nvfp4]
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct_fp8-bench-float16-input_output_len:128,128-quant:fp8]
+
+# Different sequence length tests
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct-bench-float16-input_output_len:512,32]
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct_fp4-bench-float16-input_output_len:512,32-quant:nvfp4]
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct_fp8-bench-float16-input_output_len:512,32-quant:fp8]
+
+# Long context window tests
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct-bench-float16-input_output_len:2048,128]
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct_fp4-bench-float16-input_output_len:2048,128-quant:nvfp4]
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct_fp8-bench-float16-input_output_len:2048,128-quant:fp8]
+
+# First token latency tests
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct-bench-float16-input_output_len:8,1]
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct_fp4-bench-float16-input_output_len:8,1-quant:nvfp4]
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct_fp8-bench-float16-input_output_len:8,1-quant:fp8]
+
+# Streaming tests
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct-bench-streaming-float16-input_output_len:128,128]
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct_fp4-bench-streaming-float16-input_output_len:128,128-quant:nvfp4]
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct_fp8-bench-streaming-float16-input_output_len:128,128-quant:fp8]
+
+# PyTorch backend tests
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct-bench-pytorch-float16-input_output_len:128,128]
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct_fp4-bench-pytorch-float16-input_output_len:128,128-quant:nvfp4]
+perf/test_perf.py::test_perf[llama_v3.3_70b_instruct_fp8-bench-pytorch-float16-input_output_len:128,128-quant:fp8]
