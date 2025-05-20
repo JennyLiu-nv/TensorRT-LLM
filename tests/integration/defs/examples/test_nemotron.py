@@ -172,3 +172,50 @@ def test_llm_nemotron_4_15b_2gpus(nemotron_example_root,
     venv_mpi_check_call(
         llm_venv, ["mpirun", "-n", f"{world_size}", "--allow-run-as-root"],
         summary_cmd)
+
+
+@pytest.mark.skip_less_device_memory(64000)
+@pytest.mark.parametrize("qformat", ["full_prec", "fp4", "int4"])
+@pytest.mark.parametrize("dtype", ["bfloat16"])
+def test_llm_nemotron_super_1gpu(nemotron_example_root,
+                               llm_nemotron_super_model_root, 
+                               llm_datasets_root, llm_rouge_root, llm_venv,
+                               cmodel_dir, engine_dir, dtype, qformat):
+    print("Converting checkpoint...")
+    model_name = 'nemotron-super-49b'
+    ckpt_dir = f"{cmodel_dir}/{model_name}/{qformat}/1-gpu"
+
+    quantize_cmd = [
+        f"{nemotron_example_root}/../quantization/quantize.py",
+        f"--nemo_ckpt_path={llm_nemotron_super_model_root}",
+        f"--calib_dataset={llm_datasets_root}/cnn_dailymail",
+        "--batch_size=8",
+        f"--dtype={dtype}",
+        f"--qformat={qformat}",
+        f"--output_dir={ckpt_dir}",
+    ]
+    venv_check_call(llm_venv, quantize_cmd)
+
+    print("Building engines...")
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={ckpt_dir}",
+        f"--output_dir={engine_dir}",
+        "--max_batch_size=1",
+        "--max_input_len=512",
+        "--max_seq_len=1024",
+        f"--gpt_attention_plugin={dtype}",
+        f"--gemm_plugin={dtype}",
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+    print("Run engines...")
+    summary_cmd = [
+        f"{nemotron_example_root}/../summarize.py", "--test_trt_llm",
+        f"--engine_dir={engine_dir}",
+        f"--vocab_file={ckpt_dir}/tokenizer.model", "--no_add_special_tokens",
+        "--batch_size=1", "--max_ite=10", "--check_accuracy",
+        "--tensorrt_llm_rouge1_threshold=18",
+        f"--dataset_dir={llm_datasets_root}", f"--rouge_dir={llm_rouge_root}"
+    ]
+    venv_check_call(llm_venv, summary_cmd)

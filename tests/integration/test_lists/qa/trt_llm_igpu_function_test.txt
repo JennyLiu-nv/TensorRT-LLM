@@ -1,4 +1,3 @@
-test_e2e.py::test_ptp_scaffolding[DeepSeek-R1-Distill-Qwen-32B-DeepSeek-R1/DeepSeek-R1-Distill-Qwen-32B]
 examples/test_deepseek.py::test_deepseek_gpqa_llmapi[enable_overlap_scheduler-enable_cuda_graph-disable_dp-nextn0-ep4-pp1-tp8-fp4-deepseek_r1]
 examples/test_deepseek.py::test_deepseek_gpqa_llmapi[enable_overlap_scheduler-enable_cuda_graph-disable_dp-nextn2-ep4-pp1-tp8-fp4-deepseek_r1]
 examples/test_deepseek.py::test_deepseek_gpqa_llmapi[enable_overlap_scheduler-enable_cuda_graph-disable_dp-nextn0-ep8-pp1-tp8-fp4-deepseek_r1]
@@ -80,3 +79,11 @@ disaggregated/test_disaggregated.py::test_disaggregated_deepseek_v3_lite_fp8_ucx
 disaggregated/test_disaggregated.py::test_disaggregated_deepseek_v3_lite_fp8_attention_dp[DeepSeek-V3-Lite-fp8]
 disaggregated/test_disaggregated.py::test_disaggregated_deepseek_v3_lite_fp8_attention_dp_one[DeepSeek-V3-Lite-fp8]
 disaggregated/test_disaggregated.py::test_disaggregated_deepseek_v3_lite_fp8_attention_dp_one_mtp[DeepSeek-V3-Lite-fp8]
+
+#Add by Jenny
+test_e2e.py::test_ptp_scaffolding[DeepSeek-R1-Distill-Qwen-32B-DeepSeek-R1/DeepSeek-R1-Distill-Qwen-32B]
+
+# Nemotron Super 49B tests
+examples/test_nemotron.py::test_llm_nemotron_super_1gpu[bfloat16-full_prec]
+examples/test_nemotron.py::test_llm_nemotron_super_1gpu[bfloat16-fp4]
+examples/test_nemotron.py::test_llm_nemotron_super_1gpu[bfloat16-int4]

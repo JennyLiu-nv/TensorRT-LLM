@@ -1261,6 +1261,21 @@ def nemotron_nas_model_root(request):
 
 
 @pytest.fixture(scope="function")
+def llm_nemotron_super_model_root(request):
+    "get nemotron super model path"
+    models_root = llm_models_root()
+    assert models_root, "Did you set LLM_MODELS_ROOT?"
+    
+    nemotron_super_model_root = os.path.join(models_root, "nemotron-nas",
+                                         "Llama-3_3-Nemotron-Super-49B-v1")
+    
+    assert exists(
+        nemotron_super_model_root), f"{nemotron_super_model_root} doesn't exist!"
+    
+    return nemotron_super_model_root
+
+
+@pytest.fixture(scope="function")
 def llm_lora_model_root(request):
     "get lora model path"
     models_root = llm_models_root()
