@@ -58,3 +58,9 @@ perf/test_perf.py::test_perf[deepseek_v3_lite_nvfp4-bench-pytorch-float16-input_
 perf/test_perf.py::test_perf[deepseek_r1_distill_qwen_32b-bench-pytorch-float16-input_output_len:512,32-quant:fp8]
 perf/test_perf.py::test_perf[deepseek_r1_distill_qwen_32b-bench-float16-input_output_len:128,128]
 perf/test_perf.py::test_perf[deepseek_r1_distill_qwen_32b-bench-float16-input_output_len:128,128-quant:nvfp4]
+
+# Nemotron Super 49B tests
+perf/test_perf.py::test_perf[llama_v3.3_nemotron_49b-bench-pytorch-bfloat16-maxbs:1-input_output_len:128,128]
+perf/test_perf.py::test_perf[llama_v3.3_nemotron_49b-bench-pytorch-bfloat16-maxbs:1-input_output_len:512,32]
+perf/test_perf.py::test_perf[llama_v3.3_nemotron_49b-bench-pytorch-bfloat16-maxbs:1-input_output_len:128,128-quant:fp4]
+perf/test_perf.py::test_perf[llama_v3.3_nemotron_49b-bench-pytorch-bfloat16-maxbs:1-input_output_len:128,128-quant:int4]
