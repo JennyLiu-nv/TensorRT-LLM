@@ -45,6 +45,7 @@ MODEL_PATH_DICT = {
     "llama_v3.1_8b": "llama-3.1-model/Meta-Llama-3.1-8B",
     "llama_v3.1_8b_instruct": "llama-3.1-model/Llama-3.1-8B-Instruct",
     "llama_v3.1_8b_instruct_fp8": "llama-3.1-model/Llama-3.1-8B-Instruct-FP8",
+    "llama_v3.1_8b_fp4": "nvfp4-quantized/Meta-Llama-3.1-8B",
     "llama_v3.1_70b": "llama-3.1-model/Meta-Llama-3.1-70B",
     "llama_v3.3_70b_instruct_fp8":
     "modelopt-hf-model-hub/Llama-3.3-70B-Instruct-fp8",
