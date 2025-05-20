@@ -4055,3 +4055,344 @@ def test_llm_llama_lookahead_single_gpu_summary(llama_example_root,
                                        lookahead_config='[7, 7, 7]')
 
     venv_check_call(llm_venv, summary_cmd)
+
+
+@skip_pre_blackwell
+@pytest.mark.parametrize("llama_model_root", ['llama-3.1-8b-nvfp4'], indirect=True)
+def test_llm_llama_lookahead_fp4_1gpu(llama_example_root, llama_model_root, llm_datasets_root, llm_rouge_root, llm_venv, engine_dir, qcache_dir_without_install_package):
+    """Test Llama model with lookahead and FP4 quantization on a single GPU."""
+    print("Building engines...")
+    
+    build_cmd = [
+        "trtllm-build",
+        "--lookahead_model",
+        f"--model_path={llama_model_root}",
+        f"--output_dir={engine_dir}",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16",
+        "--quantization_algorithm=nvfp4"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+    print("Running lookahead inference...")
+    run_cmd = [
+        f"{llama_example_root}/../run.py",
+        "--max_output_len=50",
+        f"--engine_dir={engine_dir}",
+        f"--tokenizer_dir={llama_model_root}",
+        "--use_lookahead=enable"
+    ]
+    venv_check_call(llm_venv, run_cmd)
+
+
+@skip_pre_ada
+@pytest.mark.parametrize("llama_model_root", ['llama-3.1-8b-fp8'], indirect=True)
+def test_llm_llama_lookahead_fp8_1gpu(llama_example_root, llama_model_root, llm_datasets_root, llm_rouge_root, llm_venv, engine_dir, qcache_dir_without_install_package):
+    """Test Llama model with lookahead and FP8 quantization on a single GPU."""
+    print("Building engines...")
+    
+    build_cmd = [
+        "trtllm-build",
+        "--lookahead_model",
+        f"--model_path={llama_model_root}",
+        f"--output_dir={engine_dir}",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16",
+        "--quantization=fp8"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+    print("Running lookahead inference...")
+    run_cmd = [
+        f"{llama_example_root}/../run.py",
+        "--max_output_len=50",
+        f"--engine_dir={engine_dir}",
+        f"--tokenizer_dir={llama_model_root}",
+        "--use_lookahead=enable"
+    ]
+    venv_check_call(llm_venv, run_cmd)
+
+
+@skip_pre_blackwell
+@pytest.mark.parametrize("llama_model_root", ['llama-3.1-8b-nvfp4'], indirect=True)
+def test_llama_fp4_tp_simulation_1gpu(llama_example_root, llama_model_root, llm_venv, cmodel_dir, engine_dir):
+    """Test TP simulation with FP4 quantization on a single GPU."""
+    print("Building engines with tensor parallelism simulation...")
+    model_name = "llama_fp4_tp_sim"
+    
+    model_dir = convert_weights(
+        llm_venv=llm_venv,
+        example_root=llama_example_root,
+        cmodel_dir=cmodel_dir,
+        model=model_name,
+        model_path=llama_model_root,
+        data_type="bfloat16"
+    )
+
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={model_dir}",
+        f"--output_dir={engine_dir}",
+        "--max_beam_width=1",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16",
+        "--tensor_parallel=2",  # Simulate TP=2 on a single GPU
+        "--quantization_algorithm=nvfp4"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+    print("Running inference with TP simulation...")
+    run_cmd = [
+        f"{llama_example_root}/../run.py",
+        "--max_output_len=50",
+        f"--engine_dir={engine_dir}",
+        f"--tokenizer_dir={llama_model_root}",
+    ]
+    venv_check_call(llm_venv, run_cmd)
+
+
+@skip_pre_ada
+@pytest.mark.parametrize("llama_model_root", ['llama-3.1-8b-fp8'], indirect=True)
+def test_llama_fp8_tp_simulation_1gpu(llama_example_root, llama_model_root, llm_venv, cmodel_dir, engine_dir):
+    """Test TP simulation with FP8 quantization on a single GPU."""
+    print("Building engines with tensor parallelism simulation...")
+    model_name = "llama_fp8_tp_sim"
+    
+    model_dir = convert_weights(
+        llm_venv=llm_venv,
+        example_root=llama_example_root,
+        cmodel_dir=cmodel_dir,
+        model=model_name,
+        model_path=llama_model_root,
+        data_type="bfloat16"
+    )
+
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={model_dir}",
+        f"--output_dir={engine_dir}",
+        "--max_beam_width=1",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16",
+        "--tensor_parallel=2",  # Simulate TP=2 on a single GPU
+        "--quantization=fp8"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+    print("Running inference with TP simulation...")
+    run_cmd = [
+        f"{llama_example_root}/../run.py",
+        "--max_output_len=50",
+        f"--engine_dir={engine_dir}",
+        f"--tokenizer_dir={llama_model_root}",
+    ]
+    venv_check_call(llm_venv, run_cmd)
+
+
+@skip_pre_blackwell
+@pytest.mark.parametrize("llama_model_root", ['llama-3.1-8b-nvfp4-quantized/Meta-Llama-3.1-8B'], indirect=True)
+def test_llama_3_x_fp4_single_gpu(llama_example_root, llama_model_root, llm_venv, cmodel_dir, engine_dir):
+    """Test TensorRT backend with Llama 3.1-8B model using FP4 quantization on a single GPU."""
+    print("Building engines...")
+    model_name = "llama_fp4_quant"
+    
+    model_dir = convert_weights(
+        llm_venv=llm_venv,
+        example_root=llama_example_root,
+        cmodel_dir=cmodel_dir,
+        model=model_name,
+        model_path=llama_model_root,
+        data_type="bfloat16"  # Use bfloat16 as the base data type
+    )
+
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={model_dir}",
+        f"--output_dir={engine_dir}",
+        "--max_beam_width=1",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+    print("Running inference...")
+    run_cmd = [
+        f"{llama_example_root}/../run.py",
+        "--max_output_len=50",
+        f"--engine_dir={engine_dir}",
+        f"--tokenizer_dir={llama_model_root}",
+    ]
+    venv_check_call(llm_venv, run_cmd)
+
+
+@pytest.mark.parametrize("llama_model_root", ['llama-3.1-8b-nvfp4'], indirect=True)
+def test_llama_fp4_inference_single_gpu(llama_example_root, llama_model_root, llm_venv, cmodel_dir, engine_dir):
+    """Test FP4 quantized Llama model inference on a single GPU."""
+    print("Building engines...")
+    model_name = "llama_fp4_inference"
+    
+    model_dir = convert_weights(
+        llm_venv=llm_venv,
+        example_root=llama_example_root,
+        cmodel_dir=cmodel_dir,
+        model=model_name,
+        model_path=llama_model_root,
+        data_type="bfloat16"
+    )
+
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={model_dir}",
+        f"--output_dir={engine_dir}",
+        "--max_beam_width=1",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+    print("Running inference with query...")
+    input_text = "Write a short poem about artificial intelligence"
+    run_cmd = [
+        f"{llama_example_root}/../run.py",
+        "--max_output_len=100",
+        f"--engine_dir={engine_dir}",
+        f"--tokenizer_dir={llama_model_root}",
+        f"--input_text={input_text}"
+    ]
+    venv_check_call(llm_venv, run_cmd)
+
+
+@skip_pre_ada
+@pytest.mark.parametrize("llama_model_root", ['llama-3.1-8b-fp8-llama-3.1-model/Llama-3.1-8B-Instruct-FP8'], indirect=True)
+def test_llama_3_x_fp8_single_gpu(llama_example_root, llama_model_root, llm_venv, cmodel_dir, engine_dir):
+    """Test TensorRT backend with Llama 3.1-8B model using FP8 quantization on a single GPU."""
+    print("Building engines...")
+    model_name = "llama_fp8_quant"
+    
+    model_dir = convert_weights(
+        llm_venv=llm_venv,
+        example_root=llama_example_root,
+        cmodel_dir=cmodel_dir,
+        model=model_name,
+        model_path=llama_model_root,
+        data_type="bfloat16"  # Use bfloat16 as the base data type
+    )
+
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={model_dir}",
+        f"--output_dir={engine_dir}",
+        "--max_beam_width=1",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+    print("Running inference...")
+    run_cmd = [
+        f"{llama_example_root}/../run.py",
+        "--max_output_len=50",
+        f"--engine_dir={engine_dir}",
+        f"--tokenizer_dir={llama_model_root}",
+    ]
+    venv_check_call(llm_venv, run_cmd)
+
+
+@skip_pre_ada
+@pytest.mark.parametrize("llama_model_root", ['llama-3.1-8b'], indirect=True)
+def test_llm_llama_fp8_single_gpu_summary(llama_example_root, llama_model_root, llm_datasets_root, llm_rouge_root, llm_venv, cmodel_dir, engine_dir):
+    """Test FP8 quantized Llama model summarization task on a single GPU."""
+    print("Quantizing weights to FP8...")
+    model_name = 'llama-fp8-summary'
+    
+    # Convert weights first
+    model_dir = convert_weights(
+        llm_venv=llm_venv,
+        example_root=llama_example_root,
+        cmodel_dir=cmodel_dir,
+        model=model_name,
+        model_path=llama_model_root,
+        data_type="bfloat16"
+    )
+    
+    # Apply FP8 quantization
+    model_dir = quantize_data(
+        llm_venv=llm_venv,
+        example_root=llama_example_root,
+        qcache_dir=cmodel_dir,
+        model_dir=model_dir,
+        model_path=llama_model_root,
+        quant_type="fp8",
+        is_smooth_quant=False
+    )
+
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={model_dir}",
+        f"--output_dir={engine_dir}",
+        "--max_beam_width=1",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16",
+        "--quantization=fp8"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+    print("Running summarization...")
+    summary_cmd = [
+        f"{llama_example_root}/../summarize.py",
+        "--test_trt_llm",
+        f"--hf_model_dir={llama_model_root}",
+        f"--engine_dir={engine_dir}",
+        "--check_accuracy",
+        f"--dataset_dir={llm_datasets_root}",
+        f"--rouge_dir={llm_rouge_root}"
+    ]
+    venv_check_call(llm_venv, summary_cmd)

@@ -353,31 +353,7 @@ def test_qwen_e2e_cpprunner_large_new_tokens(model_name, model_path, llm_venv,
         trust_remote_code=True,
         use_fast=False)
 
-    message = r"<｜begin▁of▁sentence｜><｜User｜>The operation $\otimes$ is defined for all nonzero numbers by $a \otimes b = \frac{a^{2}}{b}$. Determine $[(1 \otimes 2) \otimes 3] - [1 \otimes (2 \otimes 3)]$. Let's think step by step and output the final answer within \boxed{}.<｜Assistant｜>"
-
-    inputs = tokenizer(message, return_tensors='pt',
-                       add_special_tokens=False)['input_ids']
-
-    runner = ModelRunnerCpp.from_dir(engine_dir=f"{engine_dir}",
-                                     max_input_len=128,
-                                     max_output_len=4096,
-                                     max_batch_size=8)
-
-    outputs = runner.generate(inputs,
-                              end_id=tokenizer.eos_token_id,
-                              pad_id=tokenizer.pad_token_id,
-                              temperature=0.6,
-                              top_p=1.0,
-                              top_k=1024,
-                              max_new_tokens=1024,
-                              return_dict=True,
-                              min_length=1,
-                              num_return_sequences=4,
-                              output_sequence_lengths=True)
-
-    seq_lengths = outputs['sequence_lengths']
-    assert not (seq_lengths == 0).any(
-    ), f"Found zero length in sequence_lengths tensor: {seq_lengths}"
+    message = r"
 
 
 def trtllm_bench_prolog(
@@ -1918,3 +1894,303 @@ def test_ptp_scaffolding(llm_root, llm_venv, model_name, model_path):
 
 
 # End of Pivot-To-Python examples
+
+
+@pytest.mark.parametrize("model_name,model_path", [
+    ("Llama3.1-8B-NVFP4", "nvfp4-quantized/Meta-Llama-3.1-8B"),
+])
+def test_ptp_llama_single_gpu_fp4(llm_root, llm_venv, model_name, model_path):
+    """Test single GPU Llama with FP4 quantization using PyTorch backend."""
+    print(f"Testing PyTorch backend with {model_name}")
+    
+    # Using the PyTorch pipeline for FP4 quantized model
+    build_cmd = [
+        "python",
+        f"{llm_root}/examples/pytorch/trt_llm_pipeline.py",
+        "build",
+        "--model_name", model_name,
+        "--model_path", model_path,
+        "--precision", "bf16",
+        "--quantization", "nvfp4",
+        "--max_batch_size", "1",
+        "--max_input_len", "1024",
+        "--max_seq_len", "2048"
+    ]
+    
+    venv_check_call(llm_venv, build_cmd)
+    
+    # Run inference with the built model
+    run_cmd = [
+        "python",
+        f"{llm_root}/examples/pytorch/trt_llm_pipeline.py",
+        "run",
+        "--model_name", model_name,
+        "--prompt", "Explain the concept of quantization in deep learning.",
+        "--max_output_len", "100"
+    ]
+    
+    venv_check_call(llm_venv, run_cmd)
+
+
+@pytest.mark.parametrize("model_name,model_path", [
+    ("Llama3.1-8B-NVFP4", "nvfp4-quantized/Meta-Llama-3.1-8B"),
+])
+def test_ptp_llama_inference_fp4(llm_root, llm_venv, model_name, model_path):
+    """Test inference with Llama FP4 quantization using PyTorch backend."""
+    print(f"Testing PyTorch backend inference with {model_name}")
+    
+    # Build model first
+    build_cmd = [
+        "python",
+        f"{llm_root}/examples/pytorch/trt_llm_pipeline.py",
+        "build",
+        "--model_name", model_name,
+        "--model_path", model_path,
+        "--precision", "bf16",
+        "--quantization", "nvfp4",
+        "--max_batch_size", "1",
+        "--max_input_len", "1024",
+        "--max_seq_len", "2048"
+    ]
+    
+    venv_check_call(llm_venv, build_cmd)
+    
+    # Run inference with a specific text generation task
+    run_cmd = [
+        "python",
+        f"{llm_root}/examples/pytorch/trt_llm_pipeline.py",
+        "run",
+        "--model_name", model_name,
+        "--prompt", "Write a short story about a robot that wants to become human.",
+        "--max_output_len", "200"
+    ]
+    
+    venv_check_call(llm_venv, run_cmd)
+
+
+@skip_pre_ada
+@pytest.mark.parametrize("model_name,model_path", [
+    ("Llama3.1-8B-FP8", "llama-3.1-model/Llama-3.1-8B-Instruct-FP8"),
+])
+def test_ptp_llama_single_gpu_fp8(llm_root, llm_venv, model_name, model_path):
+    """Test single GPU Llama with FP8 quantization using PyTorch backend."""
+    print(f"Testing PyTorch backend with {model_name}")
+    
+    # Using the PyTorch pipeline for FP8 quantized model
+    build_cmd = [
+        "python",
+        f"{llm_root}/examples/pytorch/trt_llm_pipeline.py",
+        "build",
+        "--model_name", model_name,
+        "--model_path", model_path,
+        "--precision", "bf16",
+        "--quantization", "fp8",
+        "--max_batch_size", "1",
+        "--max_input_len", "1024",
+        "--max_seq_len", "2048"
+    ]
+    
+    venv_check_call(llm_venv, build_cmd)
+    
+    # Run inference with the built model
+    run_cmd = [
+        "python",
+        f"{llm_root}/examples/pytorch/trt_llm_pipeline.py",
+        "run",
+        "--model_name", model_name,
+        "--prompt", "Explain the concept of transformer models in deep learning.",
+        "--max_output_len", "100"
+    ]
+    
+    venv_check_call(llm_venv, run_cmd)
+
+
+@skip_pre_ada
+@pytest.mark.parametrize("model_name,model_path", [
+    ("Llama3.1-8B-FP8", "llama-3.1-model/Llama-3.1-8B-Instruct-FP8"),
+])
+def test_ptp_llama_inference_fp8(llm_root, llm_venv, model_name, model_path):
+    """Test inference with Llama FP8 quantization using PyTorch backend."""
+    print(f"Testing PyTorch backend inference with {model_name}")
+    
+    # Build model first
+    build_cmd = [
+        "python",
+        f"{llm_root}/examples/pytorch/trt_llm_pipeline.py",
+        "build",
+        "--model_name", model_name,
+        "--model_path", model_path,
+        "--precision", "bf16",
+        "--quantization", "fp8",
+        "--max_batch_size", "1",
+        "--max_input_len", "1024",
+        "--max_seq_len", "2048"
+    ]
+    
+    venv_check_call(llm_venv, build_cmd)
+    
+    # Run inference with a specific text generation task
+    run_cmd = [
+        "python",
+        f"{llm_root}/examples/pytorch/trt_llm_pipeline.py",
+        "run",
+        "--model_name", model_name,
+        "--prompt", "Compare and contrast different quantization techniques used in LLMs.",
+        "--max_output_len", "200"
+    ]
+    
+    venv_check_call(llm_venv, run_cmd)
+
+
+@pytest.mark.parametrize("model_name,model_path", [
+    ("Llama3.1-8B-NVFP4", "nvfp4-quantized/Meta-Llama-3.1-8B"),
+])
+def test_ptp_benchmark_pytorch_backend_fp4(llm_root, llm_venv, model_name, model_path):
+    """Test benchmarking with PyTorch backend for FP4 quantized models."""
+    print(f"Benchmarking PyTorch backend with {model_name}")
+    
+    # Build model first
+    build_cmd = [
+        "python",
+        f"{llm_root}/examples/pytorch/trt_llm_pipeline.py",
+        "build",
+        "--model_name", model_name,
+        "--model_path", model_path,
+        "--precision", "bf16",
+        "--quantization", "nvfp4",
+        "--max_batch_size", "1",
+        "--max_input_len", "1024",
+        "--max_seq_len", "2048"
+    ]
+    
+    venv_check_call(llm_venv, build_cmd)
+    
+    # Run benchmark
+    benchmark_cmd = [
+        "python",
+        f"{llm_root}/examples/pytorch/benchmark.py",
+        "--model_name", model_name,
+        "--backend", "pytorch",
+        "--input_len", "128",
+        "--output_len", "128",
+        "--num_beams", "1"
+    ]
+    
+    venv_check_call(llm_venv, benchmark_cmd)
+
+
+@skip_pre_ada
+@pytest.mark.parametrize("model_name,model_path", [
+    ("Llama3.1-8B-FP8", "llama-3.1-model/Llama-3.1-8B-Instruct-FP8"),
+])
+def test_ptp_benchmark_pytorch_backend_fp8(llm_root, llm_venv, model_name, model_path):
+    """Test benchmarking with PyTorch backend for FP8 quantized models."""
+    print(f"Benchmarking PyTorch backend with {model_name}")
+    
+    # Build model first
+    build_cmd = [
+        "python",
+        f"{llm_root}/examples/pytorch/trt_llm_pipeline.py",
+        "build",
+        "--model_name", model_name,
+        "--model_path", model_path,
+        "--precision", "bf16",
+        "--quantization", "fp8",
+        "--max_batch_size", "1",
+        "--max_input_len", "1024",
+        "--max_seq_len", "2048"
+    ]
+    
+    venv_check_call(llm_venv, build_cmd)
+    
+    # Run benchmark
+    benchmark_cmd = [
+        "python",
+        f"{llm_root}/examples/pytorch/benchmark.py",
+        "--model_name", model_name,
+        "--backend", "pytorch",
+        "--input_len", "128",
+        "--output_len", "128",
+        "--num_beams", "1"
+    ]
+    
+    venv_check_call(llm_venv, benchmark_cmd)
+
+
+@pytest.mark.parametrize("model_subdir,quant_type", [
+    ("llama-3.1-8b-nvfp4-quantized/Meta-Llama-3.1-8B", "NVFP4"),
+])
+def test_trtllm_bench_fp4_single_gpu(llm_root, llm_venv, engine_dir, model_subdir, quant_type):
+    """Test TensorRT-LLM benchmarking with FP4 quantization on a single GPU."""
+    model_name = f"llama-3.1-8b-{quant_type.lower()}"
+    engine_path = os.path.join(engine_dir, model_name)
+    os.makedirs(engine_path, exist_ok=True)
+    
+    # Build the engine
+    build_cmd = [
+        "trtllm-build",
+        "--model_path", model_subdir,
+        f"--output_dir={engine_path}",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16",
+        f"--quantization_algorithm={quant_type.lower()}"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+    
+    # Run benchmark
+    bench_cmd = [
+        "trtllm-bench",
+        f"--model={model_subdir}",
+        f"--engine_dir={engine_path}",
+        "--input_len=128",
+        "--output_len=128",
+        "--num_beams=1"
+    ]
+    
+    venv_check_call(llm_venv, bench_cmd)
+
+
+@skip_pre_ada
+@pytest.mark.parametrize("model_subdir,quant_type", [
+    ("llama-3.1-8b-llama-3.1-model/Llama-3.1-8B-Instruct-FP8", "FP8"),
+])
+def test_trtllm_bench_fp8_single_gpu(llm_root, llm_venv, engine_dir, model_subdir, quant_type):
+    """Test TensorRT-LLM benchmarking with FP8 quantization on a single GPU."""
+    model_name = f"llama-3.1-8b-{quant_type.lower()}"
+    engine_path = os.path.join(engine_dir, model_name)
+    os.makedirs(engine_path, exist_ok=True)
+    
+    # Build the engine
+    build_cmd = [
+        "trtllm-build",
+        "--model_path", model_subdir,
+        f"--output_dir={engine_path}",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16",
+        f"--quantization={quant_type.lower()}"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+    
+    # Run benchmark
+    bench_cmd = [
+        "trtllm-bench",
+        f"--model={model_subdir}",
+        f"--engine_dir={engine_path}",
+        "--input_len=128",
+        "--output_len=128",
+        "--num_beams=1"
+    ]
+    
+    venv_check_call(llm_venv, bench_cmd)

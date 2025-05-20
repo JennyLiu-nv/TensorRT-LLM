@@ -389,3 +389,122 @@ def test_phi_medusa_1gpu(llm_phi_model_root,
                            num_medusa_heads=num_medusa_heads,
                            use_py_session=use_py_session,
                            model_type='phi')
+
+
+@skip_pre_blackwell
+@pytest.mark.parametrize("llama_model_root", ['llama-3.1-8b-nvfp4'], indirect=True)
+def test_llama_medusa_fp4_1gpu(llama_model_root, medusa_example_root, llm_datasets_root, llm_rouge_root, llm_venv, cmodel_dir, engine_dir):
+    """Test Medusa decoding with a FP4 quantized Llama model on a single GPU."""
+    print("Building engines...")
+    model_name = "medusa_llama_fp4"
+    
+    # Generate dummy Medusa heads for Llama
+    get_dummy_spec_decoding_heads(hf_model_dir=llama_model_root,
+                           save_dir=llm_venv.get_working_directory())
+    
+    medusa_root = os.path.join(llm_venv.get_working_directory(),
+                               'dummy_medusa_heads')
+    
+    model_dir = convert_weights(
+        llm_venv=llm_venv,
+        example_root=medusa_example_root,
+        cmodel_dir=cmodel_dir,
+        model=model_name,
+        model_path=llama_model_root,
+        data_type="bfloat16",
+        medusa_config=os.path.join(medusa_root, "config.json"),
+        medusa_head=os.path.join(medusa_root, "medusa_lm_head.safetensors")
+    )
+    
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={model_dir}",
+        f"--output_dir={engine_dir}",
+        "--max_beam_width=1",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16",
+        "--quantization_algorithm=nvfp4",
+        "--medusa_choices=[[0], [0,0], [1], [0,1], [2], [0,0,0], [1,0], [0,2]]"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+    
+    print("Running Medusa inference...")
+    run_cmd = [
+        f"{medusa_example_root}/../run.py",
+        "--max_output_len=50",
+        f"--engine_dir={engine_dir}",
+        f"--tokenizer_dir={llama_model_root}",
+        "--medusa_choices=[[0], [0, 0], [1], [0, 1], [2], [0,0,0], [1,0], [0,2]]"
+    ]
+    venv_check_call(llm_venv, run_cmd)
+
+
+@skip_pre_ada
+@pytest.mark.parametrize("llama_model_root", ['llama-3.1-8b-fp8'], indirect=True)
+def test_llama_medusa_fp8_1gpu(llama_model_root, medusa_example_root, llm_datasets_root, llm_rouge_root, llm_venv, cmodel_dir, engine_dir):
+    """Test Medusa decoding with a FP8 quantized Llama model on a single GPU."""
+    print("Building engines...")
+    model_name = "medusa_llama_fp8"
+    
+    # Generate dummy Medusa heads for Llama
+    get_dummy_spec_decoding_heads(hf_model_dir=llama_model_root,
+                           save_dir=llm_venv.get_working_directory())
+    
+    medusa_root = os.path.join(llm_venv.get_working_directory(),
+                               'dummy_medusa_heads')
+    
+    model_dir = convert_weights(
+        llm_venv=llm_venv,
+        example_root=medusa_example_root,
+        cmodel_dir=cmodel_dir,
+        model=model_name,
+        model_path=llama_model_root,
+        data_type="bfloat16",
+        medusa_config=os.path.join(medusa_root, "config.json"),
+        medusa_head=os.path.join(medusa_root, "medusa_lm_head.safetensors")
+    )
+    
+    # Apply FP8 quantization to the model
+    model_dir = quantize_data(
+        llm_venv=llm_venv,
+        example_root=medusa_example_root,
+        qcache_dir=cmodel_dir,
+        model_dir=model_dir,
+        model_path=llama_model_root,
+        quant_type="fp8",
+        is_smooth_quant=False
+    )
+    
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={model_dir}",
+        f"--output_dir={engine_dir}",
+        "--max_beam_width=1",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16",
+        "--quantization=fp8",
+        "--medusa_choices=[[0], [0,0], [1], [0,1], [2], [0,0,0], [1,0], [0,2]]"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+    
+    print("Running Medusa inference...")
+    run_cmd = [
+        f"{medusa_example_root}/../run.py",
+        "--max_output_len=50",
+        f"--engine_dir={engine_dir}",
+        f"--tokenizer_dir={llama_model_root}",
+        "--medusa_choices=[[0], [0, 0], [1], [0, 1], [2], [0,0,0], [1,0], [0,2]]"
+    ]
+    venv_check_call(llm_venv, run_cmd)

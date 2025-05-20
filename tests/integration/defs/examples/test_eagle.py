@@ -18,7 +18,7 @@ import os
 import pytest
 from defs.common import (convert_weights, get_dummy_spec_decoding_heads,
                          venv_check_call)
-from defs.conftest import skip_post_blackwell, skip_pre_ada
+from defs.conftest import skip_post_blackwell, skip_pre_ada, skip_pre_blackwell
 from defs.trt_test_alternative import check_call
 
 
@@ -389,3 +389,124 @@ def test_phi_eagle_1gpu(llm_phi_model_root,
                           use_dynamic_tree=use_dynamic_tree,
                           llm_datasets_root=llm_datasets_root,
                           llm_rouge_root=llm_rouge_root)
+
+
+@skip_pre_blackwell
+@pytest.mark.parametrize("llama_model_root", ['llama-3.1-8b-nvfp4-eagle1'], indirect=True)
+def test_llama_eagle_fp4_1gpu(llama_model_root, eagle_example_root, llm_datasets_root, llm_rouge_root, llm_venv, cmodel_dir, engine_dir):
+    """Test Eagle speculative decoding with FP4 quantized Llama model on a single GPU."""
+    print("Building engines...")
+    model_name = "eagle_llama_fp4"
+    
+    # Generate dummy Eagle heads for Llama
+    get_dummy_spec_decoding_heads(hf_model_dir=llama_model_root,
+                                 save_dir=llm_venv.get_working_directory(),
+                                 mode='eagle')
+    
+    eagle_root = os.path.join(llm_venv.get_working_directory(), 'dummy_eagle_heads')
+    
+    model_dir = convert_weights(
+        llm_venv=llm_venv,
+        example_root=eagle_example_root,
+        cmodel_dir=cmodel_dir,
+        model=model_name,
+        model_path=llama_model_root,
+        data_type="bfloat16",
+        eagle_config=os.path.join(eagle_root, "config.json"),
+        eagle_head=os.path.join(eagle_root, "eagle_lm_head.safetensors")
+    )
+    
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={model_dir}",
+        f"--output_dir={engine_dir}",
+        "--max_beam_width=1",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16",
+        "--quantization_algorithm=nvfp4",
+        "--speculative_decoding_mode=eagle",
+        "--eagle_choices=[[0], [0,0], [1], [0,1], [2], [0,0,0], [1,0], [0,2]]"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+    
+    print("Running Eagle inference...")
+    run_cmd = [
+        f"{eagle_example_root}/../run.py",
+        "--max_output_len=50",
+        f"--engine_dir={engine_dir}",
+        f"--tokenizer_dir={llama_model_root}",
+        "--eagle_choices=[[0], [0, 0], [1], [0, 1], [2], [0,0,0], [1,0], [0,2]]"
+    ]
+    venv_check_call(llm_venv, run_cmd)
+
+
+@skip_pre_ada
+@pytest.mark.parametrize("llama_model_root", ['llama-3.1-8b-fp8-eagle1'], indirect=True)
+def test_llama_eagle_fp8_1gpu(llama_model_root, eagle_example_root, llm_datasets_root, llm_rouge_root, llm_venv, cmodel_dir, engine_dir):
+    """Test Eagle speculative decoding with FP8 quantized Llama model on a single GPU."""
+    print("Building engines...")
+    model_name = "eagle_llama_fp8"
+    
+    # Generate dummy Eagle heads for Llama
+    get_dummy_spec_decoding_heads(hf_model_dir=llama_model_root,
+                                 save_dir=llm_venv.get_working_directory(),
+                                 mode='eagle')
+    
+    eagle_root = os.path.join(llm_venv.get_working_directory(), 'dummy_eagle_heads')
+    
+    model_dir = convert_weights(
+        llm_venv=llm_venv,
+        example_root=eagle_example_root,
+        cmodel_dir=cmodel_dir,
+        model=model_name,
+        model_path=llama_model_root,
+        data_type="bfloat16",
+        eagle_config=os.path.join(eagle_root, "config.json"),
+        eagle_head=os.path.join(eagle_root, "eagle_lm_head.safetensors")
+    )
+    
+    # Apply FP8 quantization to the model
+    model_dir = quantize_data(
+        llm_venv=llm_venv,
+        example_root=eagle_example_root,
+        qcache_dir=cmodel_dir,
+        model_dir=model_dir,
+        model_path=llama_model_root,
+        quant_type="fp8",
+        is_smooth_quant=False
+    )
+    
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={model_dir}",
+        f"--output_dir={engine_dir}",
+        "--max_beam_width=1",
+        "--max_batch_size=1",
+        "--max_input_len=1024",
+        "--max_seq_len=2048",
+        "--remove_input_padding=enable",
+        "--context_fmha=enable",
+        "--use_paged_context_fmha=enable",
+        "--paged_kv_cache=enable",
+        "--gemm_plugin=bfloat16",
+        "--quantization=fp8",
+        "--speculative_decoding_mode=eagle",
+        "--eagle_choices=[[0], [0,0], [1], [0,1], [2], [0,0,0], [1,0], [0,2]]"
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+    
+    print("Running Eagle inference...")
+    run_cmd = [
+        f"{eagle_example_root}/../run.py",
+        "--max_output_len=50",
+        f"--engine_dir={engine_dir}",
+        f"--tokenizer_dir={llama_model_root}",
+        "--eagle_choices=[[0], [0, 0], [1], [0, 1], [2], [0,0,0], [1,0], [0,2]]"
+    ]
+    venv_check_call(llm_venv, run_cmd)

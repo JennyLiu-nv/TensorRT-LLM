@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import pytest
+import os
 
 from tensorrt_llm.llmapi import LLM
 from tensorrt_llm.models.modeling_utils import QuantConfig
@@ -36,6 +37,90 @@ class TestLlama3_1_8B(LlmapiAccuracyTestHarness):
             task.evaluate(llm)
             task = MMLU(self.MODEL_NAME)
             task.evaluate(llm)
+
+    @pytest.mark.parametrize("model_root", ['nvfp4-quantized/Meta-Llama-3.1-8B'], indirect=True)
+    def test_fp4_single_gpu(self, model_root, llm_venv, engine_dir):
+        """Test accuracy of Llama 3.1-8B with FP4 quantization on a single GPU."""
+        print("Building model with FP4 quantization...")
+        
+        # Create TRT-LLM engine with FP4 quantization
+        build_cmd = [
+            "trtllm-build",
+            "--model_path", model_root,
+            f"--output_dir={engine_dir}",
+            "--max_batch_size=1",
+            "--max_input_len=1024",
+            "--max_seq_len=2048",
+            "--remove_input_padding=enable",
+            "--context_fmha=enable",
+            "--use_paged_context_fmha=enable",
+            "--paged_kv_cache=enable",
+            "--gemm_plugin=bfloat16",
+            "--quantization_algorithm=nvfp4"
+        ]
+        check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+        # Run accuracy testing
+        accuracy_cmd = [
+            "python", 
+            f"{os.getcwd()}/accuracy/test_accuracy.py",
+            "--engine_dir", engine_dir,
+            "--tokenizer_dir", model_root,
+            "--input_file", "accuracy/input/simple_test_input.txt"
+        ]
+        venv_check_call(llm_venv, accuracy_cmd)
+        
+        # Check perplexity
+        ppl_cmd = [
+            "python",
+            f"{os.getcwd()}/ppl/test_model_ppl.py",
+            "--engine_dir", engine_dir,
+            "--tokenizer_dir", model_root,
+            "--test_dataset", "wikitext"
+        ]
+        venv_check_call(llm_venv, ppl_cmd)
+
+    @pytest.mark.parametrize("model_root", ['llama-3.1-model/Llama-3.1-8B-Instruct-FP8'], indirect=True)
+    def test_fp8_single_gpu(self, model_root, llm_venv, engine_dir):
+        """Test accuracy of Llama 3.1-8B with FP8 quantization on a single GPU."""
+        print("Building model with FP8 quantization...")
+        
+        # Create TRT-LLM engine with FP8 quantization
+        build_cmd = [
+            "trtllm-build",
+            "--model_path", model_root,
+            f"--output_dir={engine_dir}",
+            "--max_batch_size=1",
+            "--max_input_len=1024",
+            "--max_seq_len=2048",
+            "--remove_input_padding=enable",
+            "--context_fmha=enable",
+            "--use_paged_context_fmha=enable",
+            "--paged_kv_cache=enable",
+            "--gemm_plugin=bfloat16",
+            "--quantization=fp8"
+        ]
+        check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+        # Run accuracy testing
+        accuracy_cmd = [
+            "python", 
+            f"{os.getcwd()}/accuracy/test_accuracy.py",
+            "--engine_dir", engine_dir,
+            "--tokenizer_dir", model_root,
+            "--input_file", "accuracy/input/simple_test_input.txt"
+        ]
+        venv_check_call(llm_venv, accuracy_cmd)
+        
+        # Check perplexity
+        ppl_cmd = [
+            "python",
+            f"{os.getcwd()}/ppl/test_model_ppl.py",
+            "--engine_dir", engine_dir,
+            "--tokenizer_dir", model_root,
+            "--test_dataset", "wikitext"
+        ]
+        venv_check_call(llm_venv, ppl_cmd)
 
 
 class TestMistral7B_0_3(LlmapiAccuracyTestHarness):

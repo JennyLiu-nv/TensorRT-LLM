@@ -1201,3 +1201,67 @@ class TestQwen2_5_1_5BInstruct(CliFlowAccuracyTestHarness):
         self.run(tasks=[CnnDailymail(self.MODEL_NAME),
                         MMLU(self.MODEL_NAME)],
                  quant_algo=QuantAlgo.FP8)
+
+    @pytest.mark.parametrize("model_root", ['nvfp4-quantized/Meta-Llama-3.1-8B'], indirect=True)
+    def test_fp4_single_gpu(self, model_root, llm_venv, engine_dir):
+        """Test CLI flow for FP4 quantized Llama 3.1-8B on a single GPU."""
+        print("Testing CLI flow with FP4 quantization...")
+        
+        # Use trtllm-build to create the engine
+        build_cmd = [
+            "trtllm-build",
+            f"--model_path={model_root}",
+            f"--output_dir={engine_dir}",
+            "--max_batch_size=1",
+            "--max_input_len=1024",
+            "--max_seq_len=2048",
+            "--remove_input_padding=enable",
+            "--context_fmha=enable",
+            "--use_paged_context_fmha=enable",
+            "--paged_kv_cache=enable",
+            "--gemm_plugin=bfloat16",
+            "--quantization_algorithm=nvfp4"
+        ]
+        check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+        
+        # Run inference using the CLI
+        run_cmd = [
+            "trtllm-run",
+            f"--model_path={model_root}",
+            f"--engine_dir={engine_dir}",
+            "--max_output_len=50",
+            "--input_text", "What are the benefits of quantization in deep learning models?"
+        ]
+        venv_check_call(llm_venv, run_cmd)
+    
+    @pytest.mark.parametrize("model_root", ['llama-3.1-model/Llama-3.1-8B-Instruct-FP8'], indirect=True)
+    def test_fp8_single_gpu(self, model_root, llm_venv, engine_dir):
+        """Test CLI flow for FP8 quantized Llama 3.1-8B on a single GPU."""
+        print("Testing CLI flow with FP8 quantization...")
+        
+        # Use trtllm-build to create the engine
+        build_cmd = [
+            "trtllm-build",
+            f"--model_path={model_root}",
+            f"--output_dir={engine_dir}",
+            "--max_batch_size=1",
+            "--max_input_len=1024",
+            "--max_seq_len=2048",
+            "--remove_input_padding=enable",
+            "--context_fmha=enable",
+            "--use_paged_context_fmha=enable",
+            "--paged_kv_cache=enable",
+            "--gemm_plugin=bfloat16",
+            "--quantization=fp8"
+        ]
+        check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+        
+        # Run inference using the CLI
+        run_cmd = [
+            "trtllm-run",
+            f"--model_path={model_root}",
+            f"--engine_dir={engine_dir}",
+            "--max_output_len=50",
+            "--input_text", "Compare FP8 and INT8 quantization in terms of model accuracy and performance."
+        ]
+        venv_check_call(llm_venv, run_cmd)
