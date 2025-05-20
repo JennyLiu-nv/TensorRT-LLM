@@ -64,3 +64,15 @@ perf/test_perf.py::test_perf[llama_v3.3_nemotron_49b-bench-pytorch-bfloat16-maxb
 perf/test_perf.py::test_perf[llama_v3.3_nemotron_49b-bench-pytorch-bfloat16-maxbs:1-input_output_len:512,32]
 perf/test_perf.py::test_perf[llama_v3.3_nemotron_49b-bench-pytorch-bfloat16-maxbs:1-input_output_len:128,128-quant:fp4]
 perf/test_perf.py::test_perf[llama_v3.3_nemotron_49b-bench-pytorch-bfloat16-maxbs:1-input_output_len:128,128-quant:int4]
+
+# Nemotron Nano 8B tests
+perf/test_perf.py::test_perf[llama_v3.1_nemotron_nano_8b-bench-pytorch-bfloat16-maxbs:1-input_output_len:128,128]
+perf/test_perf.py::test_perf[llama_v3.1_nemotron_nano_8b-bench-pytorch-bfloat16-maxbs:4-input_output_len:128,128]
+perf/test_perf.py::test_perf[llama_v3.1_nemotron_nano_8b-bench-pytorch-bfloat16-maxbs:1-input_output_len:512,32]
+perf/test_perf.py::test_perf[llama_v3.1_nemotron_nano_8b-bench-pytorch-bfloat16-maxbs:1-input_output_len:128,128-quant:fp4]
+perf/test_perf.py::test_perf[llama_v3.1_nemotron_nano_8b-bench-pytorch-bfloat16-maxbs:1-input_output_len:128,128-quant:int4]
+
+# Nemotron Nano 8B with LoRA tests
+perf/test_perf.py::test_perf[llama_v3.1_nemotron_nano_8b-bench-pytorch-bfloat16-maxbs:1-input_output_len:128,128-loras:4]
+perf/test_perf.py::test_perf[llama_v3.1_nemotron_nano_8b-bench-pytorch-bfloat16-maxbs:4-input_output_len:128,128-loras:4]
+perf/test_perf.py::test_perf[llama_v3.1_nemotron_nano_8b-bench-pytorch-bfloat16-maxbs:2-input_output_len:512,32-loras:2]
