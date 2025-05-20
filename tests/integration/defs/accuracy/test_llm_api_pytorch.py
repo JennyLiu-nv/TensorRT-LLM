@@ -197,6 +197,56 @@ class TestLlama3_3_70BInstruct(LlmapiAccuracyTestHarness):
             task.evaluate(llm,
                           extra_evaluator_kwargs=dict(apply_chat_template=True))
 
+    @skip_pre_blackwell
+    def test_nvfp4_single_gpu(self):
+        model_path = f"{llm_models_root()}/nvfp4-quantized/Llama-3.3-70B-Instruct"
+        pytorch_config = PyTorchConfig(
+            torch_compile_enabled=True,
+            cuda_graph_padding_enabled=True,
+            cuda_graph_batch_sizes=[1],
+            attn_backend="TRTLLM",
+        )
+        with LLM(model_path, 
+                 pytorch_backend_config=pytorch_config,
+                 free_gpu_memory_fraction=0.85) as llm:
+            assert llm.args.quant_config.quant_algo == QuantAlgo.NVFP4
+            assert llm.args.quant_config.kv_cache_quant_algo == QuantAlgo.FP8
+            task = MMLU(self.MODEL_NAME)
+            task.evaluate(llm)
+            task = GSM8K(self.MODEL_NAME)
+            task.evaluate(llm)
+            task = GPQADiamond(self.MODEL_NAME)
+            task.evaluate(llm,
+                          extra_evaluator_kwargs=dict(apply_chat_template=True))
+
+    @pytest.mark.skip_device_not_contain(["H100", "B200"])
+    def test_fp8_single_gpu(self):
+        model_path = f"{llm_models_root()}/llama-3.3-models/Llama-3.3-70B-Instruct-FP8"
+        pytorch_config = PyTorchConfig(
+            torch_compile_enabled=True,
+            cuda_graph_padding_enabled=True,
+            cuda_graph_batch_sizes=[1],
+            attn_backend="TRTLLM",
+        )
+        
+        quant_config = QuantConfig(QuantAlgo.FP8)
+        quant_config.kv_cache_quant_algo = QuantAlgo.FP8
+        pytorch_config.kv_cache_dtype = "fp8"
+        
+        with LLM(model_path, 
+                 pytorch_backend_config=pytorch_config,
+                 quant_config=quant_config,
+                 free_gpu_memory_fraction=0.85) as llm:
+            assert llm.args.quant_config.quant_algo == QuantAlgo.FP8
+            assert llm.args.quant_config.kv_cache_quant_algo == QuantAlgo.FP8
+            task = MMLU(self.MODEL_NAME)
+            task.evaluate(llm)
+            task = GSM8K(self.MODEL_NAME)
+            task.evaluate(llm)
+            task = GPQADiamond(self.MODEL_NAME)
+            task.evaluate(llm,
+                          extra_evaluator_kwargs=dict(apply_chat_template=True))
+
 
 class TestLlama4MaverickInstruct(LlmapiAccuracyTestHarness):
     MODEL_NAME = "meta-llama/Llama-4-Maverick-17B-128E-Instruct"

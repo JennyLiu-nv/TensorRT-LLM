@@ -141,3 +141,9 @@ test_e2e.py::test_ptp_benchmark_pytorch_backend_fp8[llama-3.1-8b-llama-3.1-model
 # Add FP4/FP8 tests with eagle speculative decoding
 examples/test_eagle.py::test_llama_eagle_fp4_1gpu[llama-3.1-8b-nvfp4-eagle1]
 examples/test_eagle.py::test_llama_eagle_fp8_1gpu[llama-3.1-8b-fp8-eagle1]
+
+# Llama-3.3-70B-Instruct Single GPU Tests
+# FP4 test
+accuracy/test_llm_api_pytorch.py::TestLlama3_3_70BInstruct::test_nvfp4_single_gpu
+# FP8 test
+accuracy/test_llm_api_pytorch.py::TestLlama3_3_70BInstruct::test_fp8_single_gpu
