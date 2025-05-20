@@ -87,3 +87,13 @@ test_e2e.py::test_ptp_scaffolding[DeepSeek-R1-Distill-Qwen-32B-DeepSeek-R1/DeepS
 examples/test_nemotron.py::test_llm_nemotron_super_1gpu[bfloat16-full_prec]
 examples/test_nemotron.py::test_llm_nemotron_super_1gpu[bfloat16-fp4]
 examples/test_nemotron.py::test_llm_nemotron_super_1gpu[bfloat16-int4]
+
+# Nemotron Nano 8B tests
+examples/test_nemotron.py::test_llm_nemotron_nano_1gpu[bfloat16-full_prec-1]
+examples/test_nemotron.py::test_llm_nemotron_nano_1gpu[bfloat16-full_prec-4]
+examples/test_nemotron.py::test_llm_nemotron_nano_1gpu[bfloat16-fp4-2]
+examples/test_nemotron.py::test_llm_nemotron_nano_1gpu[bfloat16-int4-1]
+
+# Nemotron Nano 8B LoRA tests
+examples/test_nemotron.py::test_llm_nemotron_nano_lora_1gpu[bfloat16-full_prec-1-Nemotron-Nano-LoRA]
+examples/test_nemotron.py::test_llm_nemotron_nano_lora_1gpu[bfloat16-full_prec-2-Nemotron-Nano-LoRA]

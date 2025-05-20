@@ -17,6 +17,7 @@ import pytest
 from defs.common import venv_check_call, venv_mpi_check_call
 from defs.conftest import skip_fp8_pre_ada
 from defs.trt_test_alternative import check_call
+import os
 
 
 @pytest.mark.skip_less_device_memory(50000)
@@ -215,6 +216,117 @@ def test_llm_nemotron_super_1gpu(nemotron_example_root,
         f"--engine_dir={engine_dir}",
         f"--vocab_file={ckpt_dir}/tokenizer.model", "--no_add_special_tokens",
         "--batch_size=1", "--max_ite=10", "--check_accuracy",
+        "--tensorrt_llm_rouge1_threshold=18",
+        f"--dataset_dir={llm_datasets_root}", f"--rouge_dir={llm_rouge_root}"
+    ]
+    venv_check_call(llm_venv, summary_cmd)
+
+
+@pytest.mark.skip_less_device_memory(50000)
+@pytest.mark.parametrize("qformat", ["full_prec", "fp4", "int4"])
+@pytest.mark.parametrize("batch_size", [1, 2, 4])
+@pytest.mark.parametrize("dtype", ["bfloat16"])
+def test_llm_nemotron_nano_1gpu(nemotron_example_root,
+                               llm_nemotron_nano_model_root, 
+                               llm_datasets_root, llm_rouge_root, llm_venv,
+                               cmodel_dir, engine_dir, dtype, qformat, batch_size,
+                               llm_lora_model_root=None):
+    print("Converting checkpoint...")
+    model_name = 'nemotron-nano-8b'
+    ckpt_dir = f"{cmodel_dir}/{model_name}/{qformat}/1-gpu"
+
+    quantize_cmd = [
+        f"{nemotron_example_root}/../quantization/quantize.py",
+        f"--hf_model_dir={llm_nemotron_nano_model_root}",
+        f"--calib_dataset={llm_datasets_root}/cnn_dailymail",
+        "--batch_size=8",
+        f"--dtype={dtype}",
+        f"--qformat={qformat}",
+    ]
+    
+    # Add LoRA support if provided
+    if llm_lora_model_root:
+        quantize_cmd.extend([f"--lora_dir={llm_lora_model_root}"])
+    
+    quantize_cmd.extend([f"--output_dir={ckpt_dir}"])
+    
+    venv_check_call(llm_venv, quantize_cmd)
+
+    print("Building engines...")
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={ckpt_dir}",
+        f"--output_dir={engine_dir}",
+        f"--max_batch_size={batch_size}",
+        "--max_input_len=512",
+        "--max_seq_len=1024",
+        f"--gpt_attention_plugin={dtype}",
+        f"--gemm_plugin={dtype}",
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+    print("Run engines...")
+    summary_cmd = [
+        f"{nemotron_example_root}/../summarize.py", "--test_trt_llm",
+        f"--engine_dir={engine_dir}",
+        f"--vocab_file={ckpt_dir}/tokenizer.json", "--no_add_special_tokens",
+        f"--batch_size={batch_size}", "--max_ite=10", "--check_accuracy",
+        "--tensorrt_llm_rouge1_threshold=18",
+        f"--dataset_dir={llm_datasets_root}", f"--rouge_dir={llm_rouge_root}"
+    ]
+    venv_check_call(llm_venv, summary_cmd)
+
+
+@pytest.mark.skip_less_device_memory(50000)
+@pytest.mark.parametrize("qformat", ["full_prec"])
+@pytest.mark.parametrize("batch_size", [1, 2])
+@pytest.mark.parametrize("dtype", ["bfloat16"])
+@pytest.mark.parametrize("lora_model", ["Nemotron-Nano-LoRA"])
+def test_llm_nemotron_nano_lora_1gpu(nemotron_example_root,
+                                   llm_nemotron_nano_model_root, 
+                                   llm_datasets_root, llm_rouge_root, llm_venv,
+                                   cmodel_dir, engine_dir, dtype, qformat, batch_size,
+                                   lora_model):
+    print("Converting checkpoint with LoRA...")
+    model_name = 'nemotron-nano-8b-lora'
+    ckpt_dir = f"{cmodel_dir}/{model_name}/{qformat}/1-gpu"
+    
+    # Get the LoRA model path
+    models_root = os.path.dirname(llm_nemotron_nano_model_root)
+    lora_model_path = os.path.join(models_root, "lora", lora_model)
+
+    quantize_cmd = [
+        f"{nemotron_example_root}/../quantization/quantize.py",
+        f"--hf_model_dir={llm_nemotron_nano_model_root}",
+        f"--calib_dataset={llm_datasets_root}/cnn_dailymail",
+        "--batch_size=8",
+        f"--dtype={dtype}",
+        f"--qformat={qformat}",
+        f"--lora_dir={lora_model_path}",
+        f"--output_dir={ckpt_dir}",
+    ]
+    
+    venv_check_call(llm_venv, quantize_cmd)
+
+    print("Building engines...")
+    build_cmd = [
+        "trtllm-build",
+        f"--checkpoint_dir={ckpt_dir}",
+        f"--output_dir={engine_dir}",
+        f"--max_batch_size={batch_size}",
+        "--max_input_len=512",
+        "--max_seq_len=1024",
+        f"--gpt_attention_plugin={dtype}",
+        f"--gemm_plugin={dtype}",
+    ]
+    check_call(" ".join(build_cmd), shell=True, env=llm_venv._new_env)
+
+    print("Run engines...")
+    summary_cmd = [
+        f"{nemotron_example_root}/../summarize.py", "--test_trt_llm",
+        f"--engine_dir={engine_dir}",
+        f"--vocab_file={ckpt_dir}/tokenizer.json", "--no_add_special_tokens",
+        f"--batch_size={batch_size}", "--max_ite=10", "--check_accuracy",
         "--tensorrt_llm_rouge1_threshold=18",
         f"--dataset_dir={llm_datasets_root}", f"--rouge_dir={llm_rouge_root}"
     ]
