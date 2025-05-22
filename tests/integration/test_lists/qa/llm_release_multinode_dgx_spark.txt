@@ -1,0 +1,7 @@
+accuracy/test_llm_api.py::TestMixtral8x7B::test_tp2
+accuracy/test_llm_api.py::TestMixtral8x7BInstruct::test_awq_tp2
+accuracy/test_llm_api_pytorch.py::TestMixtral8x7B::test_fp8_tp2
+accuracy/test_llm_api_pytorch.py::TestMixtral8x7B::test_nvfp4_tp2
+accuracy/test_cli_flow.py::TestMixtral8x7B::test_fp4_plugin
+accuracy/test_cli_flow.py::TestMixtral8x7B::test_weight_only_int4_tp2
+accuracy/test_cli_flow.py::TestMixtral8x7B::test_weight_only_int8_tp2
