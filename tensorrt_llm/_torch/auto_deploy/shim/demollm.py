@@ -352,7 +352,7 @@ class DemoLLM(LLM):
         **kwargs: Any,
     ):
         try:
-            self.pytorch_backend_config = kwargs.pop("pytorch_backend_config", None)
+            self.pytorch_backend_config = kwargs.pop("auto_deploy_config", None)
             self.args = LlmArgs.from_kwargs(
                 model=model,
                 tokenizer=tokenizer,
@@ -372,7 +372,7 @@ class DemoLLM(LLM):
         self.mpi_session = None
         self.runtime_context = None
         self._tokenizer = self._try_load_tokenizer()
-        self.input_processor = create_input_processor(model, self.tokenizer)
+        self.input_processor = create_input_processor(None, self.tokenizer)
 
         # construct sequence info object
         seq_info = SequenceInfo(

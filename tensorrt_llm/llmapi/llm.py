@@ -10,6 +10,7 @@ from typing import Any, List, Literal, Optional, Sequence, Union
 from tqdm import tqdm
 from transformers import PreTrainedTokenizerBase
 
+from tensorrt_llm.builder import BuildConfig
 from tensorrt_llm.inputs.data import TextPrompt
 from tensorrt_llm.inputs.registry import DefaultInputProcessor
 
@@ -27,8 +28,9 @@ from ..executor.utils import (create_mpi_comm_session,
 from ..inputs import PromptInputs, create_input_processor, prompt_inputs
 from ..logger import logger
 from ..sampling_params import SamplingParams
-from .llm_args import LLMARGS_EXPLICIT_DOCSTRING, PybindMirror
-from .llm_utils import (CachedModelLoader, KvCacheRetentionConfig, LlmArgs,
+from .llm_args import (LLMARGS_EXPLICIT_DOCSTRING, PybindMirror, TorchLlmArgs,
+                       TrtLlmArgs)
+from .llm_utils import (CachedModelLoader, KvCacheRetentionConfig,
                         LlmBuildStats, ModelLoader, _ModelRuntimeContext)
 from .mpi_session import MpiPoolSession, external_mpi_comm_available
 from .tokenizer import TokenizerBase, _xgrammar_tokenizer_info
@@ -110,9 +112,10 @@ class LLM:
         self._executor_cls = kwargs.pop("executor_cls", GenerationExecutor)
 
         try:
-            self.pytorch_backend_config = kwargs.pop('pytorch_backend_config',
-                                                     None)
-            self.args = LlmArgs.from_kwargs(
+            llm_args_cls = TorchLlmArgs if kwargs.get(
+                'backend', None) == 'pytorch' else TrtLlmArgs
+
+            self.args = llm_args_cls.from_kwargs(
                 model=model,
                 tokenizer=tokenizer,
                 tokenizer_mode=tokenizer_mode,
@@ -160,8 +163,9 @@ class LLM:
             # Due to the Executor can only accept a engine path, we need to save the engine to a directory
             self._engine_dir: Optional[Path] = None
             self._executor: Optional[GenerationExecutor] = None
-            self._workspace = tempfile.TemporaryDirectory(
-                suffix="-llm-workspace", dir=self.args.workspace)
+            if self._on_trt_backend:
+                self._workspace = tempfile.TemporaryDirectory(
+                    suffix="-llm-workspace", dir=self.args.workspace)
 
             self._hf_model_dir: Optional[Path] = None
 
@@ -180,7 +184,7 @@ class LLM:
 
     @property
     def workspace(self) -> Path:
-        return Path(self._workspace.name)
+        return Path(self._workspace.name) if self._on_trt_backend else None
 
     def generate(
         self,
@@ -287,10 +291,13 @@ class LLM:
         """
         sampling_params = self._prepare_sampling_params(sampling_params)
 
-        if sampling_params.n > self.args.build_config.max_batch_size:
-            raise ValueError(
-                f"SamplingParams.n ({sampling_params.n}) should not exceed max_batch_size ({self.args.build_config.max_batch_size})"
-            )
+        # With pytorch backend, py_executor has logic to handle max_tokens of 1,
+        # so set to 1 to avoid allocating unnecessary KV cache blocks for single request
+        # TODO: Also support for trt backend
+        if (disaggregated_params is not None
+                and disaggregated_params.request_type == "context_only"
+                and not self._on_trt_backend):
+            sampling_params.max_tokens = 1
 
         inputs = prompt_inputs(inputs)
 
@@ -318,8 +325,9 @@ class LLM:
             prompt = None
             query_token_ids = inputs.get("query_token_ids", None)
         elif "prompt" in inputs:
-            prompt_token_ids, extra_processed_inputs = self.input_processor(
-                inputs, sampling_params)
+            with nvtx_range_debug("input_processor"):
+                prompt_token_ids, extra_processed_inputs = self.input_processor(
+                    inputs, sampling_params)
             prompt = inputs['prompt']
             if extra_processed_inputs is not None:
                 query_token_ids = extra_processed_inputs.get('query_token_ids')
@@ -491,10 +499,28 @@ class LLM:
                 f"The sum of prompt length ({prompt_len/self.args.parallel_config.cp_size}) and query length ({query_len}) max_tokens ({sampling_params.max_tokens}) should not exceed "
                 f"max_seq_len ({build_config.max_seq_len})")
 
-        if sampling_params.use_beam_search and sampling_params.n > build_config.max_beam_width:
-            raise ValueError(
-                f"sampling_params's n ({sampling_params.n}) should not exceed max_beam_width ({build_config.max_beam_width}) when use_beam_search is True"
-            )
+        if sampling_params.use_beam_search and sampling_params.best_of > build_config.max_beam_width:
+            if sampling_params.n == sampling_params.best_of:
+                raise ValueError(
+                    f"sampling_params.n ({sampling_params.n}) cannot exceed max_beam_width ({build_config.max_beam_width}) when use_beam_search is True"
+                )
+            else:
+                raise ValueError(
+                    f"sampling_params.best_of ({sampling_params.best_of}) cannot exceed max_beam_width ({build_config.max_beam_width}) when use_beam_search is True"
+                )
+
+        max_batch_size = self.args.max_batch_size
+        if max_batch_size is None:
+            max_batch_size = build_config.max_batch_size
+        if not sampling_params.use_beam_search and sampling_params.best_of > max_batch_size:
+            if sampling_params.n == sampling_params.best_of:
+                raise ValueError(
+                    f"sampling_params.n ({sampling_params.n}) cannot exceed max_batch_size ({max_batch_size}) when use_beam_search is False"
+                )
+            else:
+                raise ValueError(
+                    f"sampling_params.best_of ({sampling_params.best_of}) cannot exceed max_batch_size ({max_batch_size}) when use_beam_search is False"
+                )
 
         if sampling_params.prompt_logprobs and not build_config.gather_context_logits:
             raise ValueError(
@@ -530,11 +556,19 @@ class LLM:
                                                       self.tokenizer)
         self.tokenizer = self.input_processor.tokenizer
 
-        max_batch_size = self.args.max_batch_size or self.args.build_config.max_batch_size
-        max_num_tokens = self.args.max_num_tokens or self.args.build_config.max_num_tokens
-        max_seq_len = self.args.max_seq_len or self.args.build_config.max_seq_len
+        max_batch_size = self.args.max_batch_size
+        max_num_tokens = self.args.max_num_tokens
+        max_seq_len = self.args.max_seq_len
+
+        build_config = self.args.build_config if self._on_trt_backend else BuildConfig(
+        )
+
+        max_batch_size = max_batch_size or build_config.max_batch_size
+        max_num_tokens = max_num_tokens or build_config.max_num_tokens
+        max_seq_len = max_seq_len or build_config.max_seq_len
+
         executor_config = tllm.ExecutorConfig(
-            max_beam_width=self.args.build_config.max_beam_width,
+            max_beam_width=self.args.max_beam_width,
             scheduler_config=PybindMirror.maybe_to_pybind(
                 self.args.scheduler_config),
             batching_type=PybindMirror.maybe_to_pybind(self.args.batching_type)
@@ -560,7 +594,7 @@ class LLM:
         if self.args.peft_cache_config is not None:
             executor_config.peft_cache_config = PybindMirror.maybe_to_pybind(
                 self.args.peft_cache_config)
-        elif self.args.build_config.plugin_config.lora_plugin:
+        elif self._on_trt_backend and self.args.build_config.plugin_config.lora_plugin:
             engine_config = EngineConfig.from_json_file(self._engine_dir /
                                                         "config.json")
             lora_config = engine_config.build_config.lora_config
@@ -588,7 +622,7 @@ class LLM:
         executor_config.normalize_log_probs = self.args.normalize_log_probs
         executor_config.enable_chunked_context = self.args.enable_chunked_prefill
         executor_config.max_beam_width = self.args.max_beam_width or self.args.build_config.max_beam_width
-        if self.args.extended_runtime_perf_knob_config is not None:
+        if self._on_trt_backend and self.args.extended_runtime_perf_knob_config is not None:
             executor_config.extended_runtime_perf_knob_config = PybindMirror.maybe_to_pybind(
                 self.args.extended_runtime_perf_knob_config)
         if self.args.cache_transceiver_config is not None:
@@ -598,9 +632,11 @@ class LLM:
         update_executor_config(
             executor_config,
             backend=self.args.backend,
-            pytorch_backend_config=self.pytorch_backend_config,
+            pytorch_backend_config=self.args.get_pytorch_backend_config()
+            if self.args.backend == "pytorch" else None,
             mapping=self.args.parallel_config.to_mapping(),
-            build_config=self.args.build_config,
+            build_config=self.args.build_config
+            if self._on_trt_backend else None,
             speculative_config=self.args.speculative_config,
             hf_model_dir=self._hf_model_dir,
             trt_engine_dir=self._engine_dir,
@@ -608,8 +644,9 @@ class LLM:
             max_seq_len=max_seq_len)
         executor_config.llm_parallel_config = self.args.parallel_config
         return_logits = self.args.gather_generation_logits or (
-            self.args.build_config
+            self._on_trt_backend and self.args.build_config
             and self.args.build_config.gather_context_logits)
+
         self._executor = self._executor_cls.create(
             self._engine_dir,
             executor_config=executor_config,
@@ -625,6 +662,10 @@ class LLM:
             ),
             is_llm_executor=True,
             lora_config=self.args.lora_config)
+
+    @property
+    def _on_trt_backend(self) -> bool:
+        return isinstance(self.args, TrtLlmArgs)
 
     def _try_load_tokenizer(self) -> Optional[TokenizerBase]:
         if self.args.skip_tokenizer_init:
