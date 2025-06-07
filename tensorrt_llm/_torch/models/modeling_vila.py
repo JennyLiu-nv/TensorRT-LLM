@@ -1109,7 +1109,7 @@ class VilaInputProcessor(InputProcessor):
 
 
 @register_auto_model(VilaConfig.model_architecture)
-@register_input_processor(VilaInputProcessor)
+@register_input_processor(VilaInputProcessor, model_type="llava_llama")
 class VilaModel(PreTrainedModel):
     config_class = VilaConfig
 
@@ -1146,8 +1146,8 @@ class VilaModel(PreTrainedModel):
     def forward(
         self,
         attn_metadata: AttentionMetadata,
-        input_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        input_ids: Optional[torch.IntTensor] = None,
+        position_ids: Optional[torch.IntTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         return_context_logits: Optional[bool] = False,
         **kwargs,

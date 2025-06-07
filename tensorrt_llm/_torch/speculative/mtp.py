@@ -20,7 +20,7 @@ class SampleStateTensorsMTP(SampleStateTensors):
     next_draft_tokens: torch.Tensor
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class SampleStateMTP(SampleState):
     device: SampleStateTensorsMTP
     host: SampleStateTensorsMTP
@@ -221,10 +221,14 @@ class MTPSampler(TorchSampler):
     MTP sampler.
     """
 
+    SampleState = SampleStateMTP
+
     def __init__(self, max_seq_len: int, config: MTPConfig):
         super().__init__(max_seq_len, False)
         self.mapping = None
-        self.draft_len = config.num_nextn_predict_layers
+        self.draft_len = 0
+        if config is not None:
+            self.draft_len = config.num_nextn_predict_layers
 
     def _draft_meet_max_token_stop_criteria(self, request: LlmRequest,
                                             num_tokens: int, beam_idx: int):
@@ -259,8 +263,7 @@ class MTPSampler(TorchSampler):
                 if self._draft_meet_max_token_stop_criteria(
                         request, num_tokens, beam_idx):
                     should_stop = True
-                if not should_stop:
-                    request.py_draft_tokens = next_draft_tokens_list[idx]
+                request.py_draft_tokens = next_draft_tokens_list[idx]
                 request.py_decoding_iter += 1
             idx += 1
 
@@ -282,8 +285,7 @@ class MTPSampler(TorchSampler):
                 if self._draft_meet_max_token_stop_criteria(
                         request, num_tokens, beam_idx):
                     should_stop = True
-                if not should_stop:
-                    request.py_draft_tokens = next_draft_tokens_list[idx]
+                request.py_draft_tokens = next_draft_tokens_list[idx]
                 request.py_rewind_len = self.draft_len - (num_new_tokens - 1)
                 request.py_decoding_iter += 1
             idx += 1
@@ -437,7 +439,7 @@ class MTPWorker(nn.Module):
 
     def update_mtp_hidden_states(
         self,
-        input_ids: torch.LongTensor,
+        input_ids: torch.IntTensor,
         target_model_hidden_states: torch.Tensor,
         num_accepted_tokens: torch.Tensor,
         accepted_tokens: torch.Tensor,
@@ -451,7 +453,7 @@ class MTPWorker(nn.Module):
         Also update the seq_len and kv_lens in attention metadata.
 
         Args:
-            input_ids: torch.LongTensor
+            input_ids: torch.IntTensor
                 [num_tokens]
                 The input ids of all requests. Flatten.
 
@@ -645,7 +647,7 @@ class MTPWorker(nn.Module):
 
     def sample_and_accept_draft_tokens(
         self,
-        input_ids: torch.LongTensor,
+        input_ids: torch.IntTensor,
         logits: torch.Tensor,
         spec_metadata: MTPSpecMetadata,
         attn_metadata: AttentionMetadata,
@@ -657,7 +659,7 @@ class MTPWorker(nn.Module):
         for acceptance.
 
         Args:
-            input_ids: torch.LongTensor
+            input_ids: torch.IntTensor
                 [num_tokens]
                 The input ids of all requests. Flatten.
 
@@ -731,7 +733,6 @@ class MTPWorker(nn.Module):
         num_accepted_tokens = torch.ones(batch_size,
                                          dtype=torch.int,
                                          device=logits.device)
-
         if self.spec_config.use_relaxed_acceptance_for_thinking:
             mtp_relaxed_delta_pool = spec_metadata.mtp_hidden_states_manager.mtp_relaxed_delta_pool
 
@@ -793,8 +794,7 @@ class MTPWorker(nn.Module):
                                                   device=logits.device)
                 accepted_tokens, num_accepted_tokens = torch.ops.trtllm.mtp_sampling_and_accepted_draft_tokens_op(
                     logits, spec_metadata.draft_tokens, target_tokens_cache,
-                    accepted_tokens, num_accepted_tokens, mtp_num_modules,
-                    batch_size, num_contexts, logits.shape[-1])
+                    mtp_num_modules, batch_size, num_contexts, logits.shape[-1])
             else:
                 # Do greedy sampling for the input logits
                 target_tokens = torch.argmax(logits, dim=-1)
@@ -849,8 +849,8 @@ class MTPWorker(nn.Module):
     def prepare_drafter_inputs(
         self,
         mtp_layer_idx: int,
-        input_ids: torch.LongTensor,
-        position_ids: torch.LongTensor,
+        input_ids: torch.IntTensor,
+        position_ids: torch.IntTensor,
         previous_layer_hidden_states: torch.Tensor,
         previous_layer_draft_tokens: torch.Tensor,
         num_accepted_tokens: torch.Tensor,
@@ -864,13 +864,13 @@ class MTPWorker(nn.Module):
             mtp_layer_idx: int
                 The index number of the current MTP layer.
 
-            input_ids: torch.LongTensor
+            input_ids: torch.IntTensor
                 [num_tokens]
                 The input ids of all requests. Flatten.
                 When mtp_layer_idx == 0: num_tokens = sum(all prompts) + num_generation * (mtp_num_modules + 1)
                 When mtp_layer_idx > 0: num_tokens = sum(all prompts) + num_generation * (mtp_num_modules)
 
-            position_ids: torch.LongTensor
+            position_ids: torch.IntTensor
                 [1][num_tokens]
                 The position id of all requests. Flatten.
 
@@ -1157,8 +1157,8 @@ class MTPEagleWorker(MTPWorker):
 
     def prepare_drafter_inputs(
         self,
-        input_ids: torch.LongTensor,
-        position_ids: torch.LongTensor,
+        input_ids: torch.IntTensor,
+        position_ids: torch.IntTensor,
         hidden_states: torch.Tensor,
         accepted_tokens: torch.Tensor,
         num_accepted_tokens: torch.Tensor,
