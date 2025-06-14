@@ -35,7 +35,7 @@ methods:
         annotation: Optional[tensorrt_llm.llmapi.llm_args.PeftCacheConfig]
         default: null
       scheduler_config:
-        annotation: Optional[tensorrt_llm.llmapi.llm_args.SchedulerConfig]
+        annotation: tensorrt_llm.llmapi.llm_args.SchedulerConfig
         default: null
       extended_runtime_perf_knob_config:
         annotation: Optional[tensorrt_llm.llmapi.llm_args.ExtendedRuntimePerfKnobConfig]
@@ -81,6 +81,9 @@ methods:
       max_cpu_loras:
         annotation: int
         default: 4
+      allreduce_strategy:
+        annotation: Optional[Literal['AUTO', 'NCCL', 'UB', 'MINLATENCY', 'ONESHOT', 'TWOSHOT', 'LOWPRECISION', 'MNNVL']]
+        default: AUTO
       kwargs:
         annotation: Any
         default: inspect._empty
@@ -139,4 +142,7 @@ methods:
 properties:
   workspace:
     annotation: pathlib.Path
+    default: inspect._empty
+  llm_id:
+    annotation: str
     default: inspect._empty

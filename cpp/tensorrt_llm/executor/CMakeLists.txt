@@ -16,6 +16,7 @@ set(TARGET_DIR ${CMAKE_CURRENT_SOURCE_DIR})
 # keep this list sorted alphabetically
 set(SRCS
     cache_transmission/mpi_utils/connection.cpp
+    cache_transmission/agent_utils/connection.cpp
     cache_transmission/transferAgent.cpp
     cache_transmission/cacheConcatenate.cu
     contextPhaseParams.cpp
@@ -39,6 +40,7 @@ set(SRCS
     peftCacheConfig.cpp
     promptTuningConfig.cpp
     mropeConfig.cpp
+    multimodalInput.cpp
     request.cpp
     requestUtils.cpp
     requestWithId.cpp
