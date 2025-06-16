@@ -35,7 +35,6 @@ from contextlib import asynccontextmanager
 import numpy as np
 import triton_python_backend_utils as pb_utils
 import yaml
-# PYTHONPATH needs to include the root directory of all_models to import all_models.helper.helpers properly
 from helpers import (get_input_tensor_by_name, get_output_config_from_request,
                      get_sampling_params_from_request,
                      get_streaming_from_request)
@@ -113,6 +112,8 @@ class TritonPythonModel:
             - `initialize` is called only once when the model is being loaded.
             - Implementing `initialize` function is optional.
         """
+        from tensorrt_llm.llmapi import MpiCommSession
+
         self.model_config = json.loads(args["model_config"])
         triton_config = get_model_config(os.environ.get('LLM_CONFIG_PATH',
                                                         'model.yaml'),
@@ -137,6 +138,10 @@ class TritonPythonModel:
             self.logger.log_info(
                 f"[trtllm] rank{global_mpi_rank()} is starting trtllm engine with args: {self.llm_engine_args}"
             )
+
+            mpi_session = MpiCommSession(comm=COMM_WORLD,
+                                         n_workers=COMM_WORLD.Get_size())
+            self.llm_engine_args["_mpi_session"] = mpi_session
 
             # Starting the TRT-LLM engine with LLM API and its event thread running the AsyncIO event loop.
             self._init_engine()
