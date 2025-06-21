@@ -11,18 +11,16 @@ from torch.utils._pytree import tree_any_only
 from tqdm import tqdm
 
 from tensorrt_llm.lora_manager import HfLoraLoader
-from tensorrt_llm.mapping import Mapping
 from tensorrt_llm.models.convert_utils import split_matrix_tp
 
 from ...logger import logger
-from ...mapping import Mapping
 from ...models.modeling_utils import QuantConfig
 from ..attention_backend import AttentionMetadata
 from ..distributed.communicator import pp_recv, pp_send
 from ..model_config import ModelConfig, TConfig
 from ..modules.attention import Attention
 from ..modules.embedding import Embedding, LMHead
-from ..modules.fused_moe import FusedMoE
+from ..modules.fused_moe import MoE, VanillaMoE
 from ..modules.linear import Linear, TensorParallelMode, WeightMode
 from ..modules.logits_processor import LogitsProcessor
 from ..modules.rms_norm import RMSNorm
@@ -152,9 +150,15 @@ def skip_forward(
     if hasattr(module, 'skip_forward'):
         module.forward = module.skip_forward
         remove_weights(module, ignore_modules)
+    else:
+        logger.warning(
+            f"Fail to skip forward since {module.__class__.__name__} "
+            f"does not have `skip_forward`.")
 
 
 def forward_after_recv(forward_fn):
+    if hasattr(forward_fn, "__wrapped_by_forward_after_recv__"):
+        return forward_fn
 
     def forward_after_recv_fn(
         position_ids,
@@ -176,10 +180,13 @@ def forward_after_recv(forward_fn):
             **kwargs,
         )
 
+    forward_after_recv_fn.__wrapped_by_forward_after_recv__ = True
     return forward_after_recv_fn
 
 
 def forward_before_send(forward_fn):
+    if hasattr(forward_fn, "__wrapped_by_forward_before_send__"):
+        return forward_fn
 
     def forward_before_send_fn(
         position_ids,
@@ -204,6 +211,7 @@ def forward_before_send(forward_fn):
             pp_send(hidden_states)
         return output
 
+    forward_before_send_fn.__wrapped_by_forward_before_send__ = True
     return forward_before_send_fn
 
 
@@ -211,7 +219,6 @@ class PPInitCaller(type):
 
     def __call__(cls, *args, **kwargs):
         obj = type.__call__(cls, *args, **kwargs)
-        obj.__pp_init__()
         return obj
 
 
@@ -227,12 +234,13 @@ class DecoderModel(nn.Module, metaclass=PPInitCaller):
         self.model_config = model_config
         self.prologue = []
         self.epilogue = []
+        self.keep_embed_tokens = False
 
     def forward(
         self,
         attn_metadata: AttentionMetadata,
-        input_ids: torch.LongTensor = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        input_ids: torch.IntTensor = None,
+        position_ids: Optional[torch.IntTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         lora_params: Optional[dict] = None,
         **kwargs,
@@ -270,7 +278,7 @@ class DecoderModel(nn.Module, metaclass=PPInitCaller):
             )
             return
 
-        if hasattr(self, "embed_tokens"):
+        if hasattr(self, "embed_tokens") and not self.keep_embed_tokens:
             self.prologue.append(self.embed_tokens)
         if hasattr(self, "norm"):
             self.epilogue.append(self.norm)
@@ -346,13 +354,6 @@ class DecoderModelForCausalLM(nn.Module,
                 vocab_size,
                 hidden_size,
                 dtype=config.pretrained_config.torch_dtype,
-                mapping=Mapping(
-                    world_size=1,
-                    tp_size=1,
-                    rank=0,
-                ),
-                tensor_parallel_mode=None,
-                gather_output=False,
             )
         else:
             # TODO(zhenhuanc): Currently lm_head Linear will not accept QuantConfig
@@ -393,6 +394,8 @@ class DecoderModelForCausalLM(nn.Module,
             assert self.lm_head.tp_mode == self.model.embed_tokens.tp_mode, (
                 "lm_head and vocab embedding should use the same TP mode")
             self.lm_head.weight = self.model.embed_tokens.weight
+            if config.mapping.is_last_pp_rank():
+                self.model.keep_embed_tokens = True
 
         self.logits_processor = LogitsProcessor()
 
@@ -411,12 +414,14 @@ class DecoderModelForCausalLM(nn.Module,
             for module in self.epilogue:
                 skip_forward(module)
 
+        self.model.__pp_init__()
+
     def __post_init__(self):
         # 1. mixed precision
         quant_config_dict = self.model_config.quant_config_dict
         if quant_config_dict is not None:
             for name, module in self.named_modules():
-                if isinstance(module, FusedMoE):
+                if isinstance(module, (MoE, VanillaMoE)):
                     for n, q in quant_config_dict.items():
                         # all linear layers inside FusedMoE share the same quant config
                         if name in n:
@@ -491,8 +496,8 @@ class DecoderModelForCausalLM(nn.Module,
     def forward(
         self,
         attn_metadata: AttentionMetadata,
-        input_ids: torch.LongTensor = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        input_ids: torch.IntTensor = None,
+        position_ids: Optional[torch.IntTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         return_context_logits: bool = False,
         spec_metadata: Optional[SpecMetadata] = None,
@@ -516,8 +521,8 @@ class DecoderModelForCausalLM(nn.Module,
             return_context_logits,
         )
 
-    def load_weights(self, weights: Dict):
-        _load_weights_impl(self, weights)
+    def load_weights(self, weights: Dict, skip_modules: List[str] = []):
+        _load_weights_impl(self, weights, skip_modules)
 
     def infer_max_seq_len(self) -> int:
         # Modified from tensorrt_llm/builder.py _init_max_seq_len
@@ -619,8 +624,18 @@ def rename_weights_with_regex(pattern_mapping: Dict[str, str], weights: Dict):
     return renamed_weights
 
 
+def filter_weights(prefix, weights: Dict):
+    result = {}
+    for k, v in weights.items():
+        if k.startswith(prefix):
+            new_k = k[len(prefix) + 1:]
+            result[new_k] = v
+    return result
+
+
 def _load_weights_impl(model: Union[nn.Module, DecoderModelForCausalLM],
                        weights: Dict,
+                       skip_modules: List[str] = [],
                        params_map: Optional[Dict[str, str]] = None):
     if not hasattr(model, 'model_config') or not isinstance(
             model.model_config, ModelConfig):
@@ -637,14 +652,6 @@ def _load_weights_impl(model: Union[nn.Module, DecoderModelForCausalLM],
         model.config, "head_dim",
         model.config.hidden_size // model.config.num_attention_heads)
 
-    def filter_weights(prefix, weights: Dict):
-        result = {}
-        for k, v in weights.items():
-            if k.startswith(prefix):
-                new_k = k[len(prefix) + 1:]
-                result[new_k] = v
-        return result
-
     params_map = {
         'qkv_proj': ['q_proj', 'k_proj', 'v_proj'],
         'gate_up_proj': ['gate_proj', 'up_proj']
@@ -653,6 +660,10 @@ def _load_weights_impl(model: Union[nn.Module, DecoderModelForCausalLM],
     for name, module in tqdm(list(model.named_modules()),
                              desc="Loading weights"):
         if len(module._parameters) > 0:
+            # skip load weights if module is in skip_modules
+            if any(skip_module in name for skip_module in skip_modules):
+                continue
+
             # skip load weights if tie word embeddings is enabled and layer is lm_head
             if model.config.tie_word_embeddings and name.startswith("lm_head"):
                 continue

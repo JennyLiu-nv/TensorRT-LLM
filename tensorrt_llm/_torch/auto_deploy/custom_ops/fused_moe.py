@@ -3,7 +3,7 @@ from typing import List
 import torch
 import torch.nn.functional as F
 
-from ...modules.fused_moe import FusedMoE  # noqa: F401
+from ...modules.fused_moe import MoE  # noqa: F401
 
 
 @torch.library.custom_op("moe::torch_moe", mutates_args=())
@@ -174,6 +174,7 @@ def trtllm_fused_moe(
         tp_rank=0,
         ep_size=1,
         ep_rank=0,
+        enable_alltoall=False,
     )[0].view(x_shape)
 
 
