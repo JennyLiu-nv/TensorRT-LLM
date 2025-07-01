@@ -2012,6 +2012,20 @@ def test_ptp_quickstart_multimodal(llm_root, llm_venv, model_name, model_path,
                 ],
             ],
         },
+        "NVILA-15B-FP16": {
+            "image": [
+                ["stormy", "ocean", "waves", "clouds", "gray", "sky"],
+                ["rock", "formation", "sunny", "sky", "clouds"],
+                ["road", "busy", "car", "black", "blue"],
+            ],
+            "video": [
+                ["woman", "street", "night", "walking", "camera"],
+                [
+                    "stunning", "earth", "space", "planet", "curvature", "dark",
+                    "bright", "contrast", "illuminate"
+                ],
+            ],
+        },
         "llava-v1.6-mistral-7b": {
             "image": [
                 [
