@@ -82,6 +82,7 @@ MODEL_PATH_DICT = {
     "deepseek_r1_distill_qwen_32b": "DeepSeek-R1/DeepSeek-R1-Distill-Qwen-32B",
     "mixtral_8x22b_v0.1": "Mixtral-8x22B-v0.1",
     "mistral_7b_v0.1": "mistral-7b-v0.1",
+    "mistral_7b_v0.3": "Mistral-7B-Instruct-v0.3",
     "deepseek_r1_fp8": "DeepSeek-R1/DeepSeek-R1",
     "deepseek_r1_nvfp4": "DeepSeek-R1/DeepSeek-R1-FP4",
     "deepseek_v3_lite_fp8": "DeepSeek-V3-Lite/fp8",
@@ -1379,7 +1380,7 @@ class MultiMetricPerfTest(AbstractPerfScriptTestClass):
                     data_cmd = self.get_prepare_data_command(
                         engine_dir, input_len, output_len)
                     data_cmds.append(data_cmd)
-
+        print(f"================= data_cmd: {data_cmd}")
         # Construct MPI command.
         mpi_cmd = []
         if num_gpus > 1 and num_gpus <= 8 and not self._config.runtime == "bench":
