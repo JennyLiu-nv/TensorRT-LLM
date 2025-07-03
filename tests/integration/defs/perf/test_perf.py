@@ -1380,7 +1380,6 @@ class MultiMetricPerfTest(AbstractPerfScriptTestClass):
                     data_cmd = self.get_prepare_data_command(
                         engine_dir, input_len, output_len)
                     data_cmds.append(data_cmd)
-        print(f"================= data_cmd: {data_cmd}")
         # Construct MPI command.
         mpi_cmd = []
         if num_gpus > 1 and num_gpus <= 8 and not self._config.runtime == "bench":
