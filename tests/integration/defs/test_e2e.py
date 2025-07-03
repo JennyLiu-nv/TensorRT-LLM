@@ -1607,7 +1607,7 @@ def test_ptp_quickstart(llm_root, llm_venv):
     pytest.param('Mixtral-8x7B-BF16',
                  'Mixtral-8x7B-Instruct-v0.1',
                  marks=skip_pre_blackwell),
-    pytest.param('Mixtral-7B-Instruct-v0.3',
+    pytest.param('Mistral-7B-Instruct-v0.3',
                  'Mistral-7B-Instruct-v0.3',
                  marks=skip_pre_blackwell),
     pytest.param('Mistral-Nemo-12b-Base',
