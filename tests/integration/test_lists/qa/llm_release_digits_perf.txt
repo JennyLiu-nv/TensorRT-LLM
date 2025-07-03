@@ -37,4 +37,3 @@ perf/test_perf.py::test_perf[mixtral_8x7b_v0.1_instruct_fp4-bench-pytorch-float4
 
 perf/test_perf.py::test_perf[mistral_nemo_12b_base-bench-pytorch-float16-maxbs:1-maxnt:320-input_output_len:128,128-reqs:32]
 perf/test_perf.py::test_perf[deepseek_r1_distill_qwen_32b-bench-pytorch-float16-maxbs:1-maxnt:320-input_output_len:128,128-reqs:32]
-
