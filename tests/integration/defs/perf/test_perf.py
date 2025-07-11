@@ -138,6 +138,7 @@ HF_MODEL_PATH = {
     "mistral_7b_v0.1_hf": "mistralai/Mistral-7B-v0.1",
     "flan_t5_base_hf": "google/flan-t5-small",
     "phi_4_mini_instruct_hf": "microsoft/Phi-4-mini-instruct",
+    "nvila_15b": "nvidia/NVILA-15B",
 }
 LORA_MODEL_PATH = {
     "llama_v2_13b": "llama-models-v2/chinese-llama-2-lora-13b",
@@ -1381,6 +1382,7 @@ class MultiMetricPerfTest(AbstractPerfScriptTestClass):
                         engine_dir, input_len, output_len)
                     data_cmds.append(data_cmd)
         # Construct MPI command.
+        print(f"##########JJJJJJ data_cmd: {data_cmd}")
         mpi_cmd = []
         if num_gpus > 1 and num_gpus <= 8 and not self._config.runtime == "bench":
             if cpu_socket_count_gt_1():
