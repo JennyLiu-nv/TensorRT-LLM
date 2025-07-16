@@ -112,7 +112,7 @@ MODEL_PATH_DICT = {
     "mamba_2.8b": "mamba/mamba-2.8b-hf",
     "gpt_20b": "gpt-neox-20b",
     "gpt_350m_moe": "gpt2-medium",
-    "nvila_15b": "NVILA-15B",
+    "nvila_15b": "NVILA-15B/llm",
     "phi_3_mini_4k_instruct": "Phi-3/Phi-3-mini-4k-instruct",
     "phi_3_mini_128k_instruct": "Phi-3/Phi-3-mini-128k-instruct",
     "phi_4_mini_instruct": "Phi-4-mini-instruct",
