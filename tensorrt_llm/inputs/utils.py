@@ -179,11 +179,11 @@ NOTE:
     placeholder for the model needs to be added in retrieve_multimodal_placeholder().
 """
 
-SUPPORTED_QWEN_MODEL_GROUP = ["qwen2_vl", "qwen2_5_vl"]
+SUPPORTED_QWEN_MODEL_GROUP = ["qwen2_vl", "qwen2_5_vl", "qwen2"]
 SUPPORTED_GEMMA_MODEL_GROUP = ["gemma3"]
 SUPPORTED_LLAMA_MODEL_GROUP = ["mllama", "llama4"]
-SUPPORTED_LLAVA_IMAGE_MODEL_GROUP = ["llava_llama", "llava_next"]
-SUPPORTED_LLAVA_VIDEO_MODEL_GROUP = ["llava_llama"]
+SUPPORTED_LLAVA_IMAGE_MODEL_GROUP = ["llava_llama", "llava_next", "vila"]
+SUPPORTED_LLAVA_VIDEO_MODEL_GROUP = ["llava_llama", "vila"]
 SUPPORTED_MISTRAL_IMAGE_MODEL_GROUP = ["mistral3"]
 SUPPORTED_HYPERCLOVAX_MODEL_GROUP = ["hyperclovax_vlm"]
 
@@ -213,8 +213,10 @@ class MultimodalPlaceholderPlacement(enum.Enum):
 PLACEHOLDER_PLACEMENT_MAP = {
     "qwen2_vl": MultimodalPlaceholderPlacement.BEFORE_TEXT,
     "qwen2_5_vl": MultimodalPlaceholderPlacement.BEFORE_TEXT,
+    "qwen2": MultimodalPlaceholderPlacement.BEFORE_TEXT,
     "llava_llama": MultimodalPlaceholderPlacement.BEFORE_TEXT,
     "llava_next": MultimodalPlaceholderPlacement.BEFORE_TEXT,
+    "vila": MultimodalPlaceholderPlacement.BEFORE_TEXT,
     "llama4": MultimodalPlaceholderPlacement.BEFORE_TEXT,
     "mllama": MultimodalPlaceholderPlacement.BEFORE_TEXT,
     "hyperclovax_vlm": MultimodalPlaceholderPlacement.AFTER_TEXT,
