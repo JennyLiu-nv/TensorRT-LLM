@@ -1610,6 +1610,9 @@ def test_ptp_quickstart(llm_root, llm_venv):
     pytest.param('Mistral-Nemo-12b-Base',
                  'Mistral-Nemo-Base-2407',
                  marks=skip_pre_blackwell),
+    pytest.param('Mistral-7B-Instruct-v0.3',
+                 'Mistral-7B-Instruct-v0.3',
+                 marks=skip_pre_blackwell),
     pytest.param('DeepSeek-R1-Distill-Qwen-32B',
                  'DeepSeek-R1/DeepSeek-R1-Distill-Qwen-32B',
                  marks=skip_pre_blackwell),
@@ -2004,6 +2007,20 @@ def test_ptp_quickstart_multimodal(llm_root, llm_venv, model_name, model_path,
 
     expected_keywords = {
         "NVILA-8B-FP16": {
+            "image": [
+                ["stormy", "ocean", "waves", "clouds", "gray", "sky"],
+                ["rock", "formation", "sunny", "sky", "clouds"],
+                ["road", "busy", "car", "black", "blue"],
+            ],
+            "video": [
+                ["woman", "street", "night", "walking", "camera"],
+                [
+                    "stunning", "earth", "space", "planet", "curvature", "dark",
+                    "bright", "contrast", "illuminate"
+                ],
+            ],
+        },
+        "NVILA-15B-FP16": {
             "image": [
                 ["stormy", "ocean", "waves", "clouds", "gray", "sky"],
                 ["rock", "formation", "sunny", "sky", "clouds"],
