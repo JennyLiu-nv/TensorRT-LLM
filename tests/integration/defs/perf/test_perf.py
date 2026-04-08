@@ -244,6 +244,7 @@ TRUST_REMOTE_CODE_MODELS = {  # these models require explicit trust_remote_code=
     "llama_v3.1_nemotron_ultra_253b",
     "llama_v3.1_nemotron_ultra_253b_fp8",
     "kimi_k2_nvfp4",
+    "nemotron_3_super_120b_nvfp4",
 }
 
 # Models requiring TLLM_ALLOW_LONG_MAX_MODEL_LEN=1 due to max_seq_len > 128K

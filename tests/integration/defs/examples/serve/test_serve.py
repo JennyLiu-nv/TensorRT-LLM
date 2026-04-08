@@ -253,10 +253,8 @@ def test_env_overrides_pdl(tmp_path):
 def test_nemotron_super_nvfp4(serve_test_root):
     """Test Nemotron 3 Super 120B NVFP4 with chunked prefill + MTP=3.
 
-    Sends a mix of short and long prompts concurrently to validate:
-    - Long prompt triggers chunked prefill (max_num_tokens=8192 << max_seq_len=1M)
-    - MTP=3 speculative decoding stays active during chunked prefill
-    - Short-prompt decode latency is not blocked by the long-prompt prefill
+    Sends a mix of short and long prompts concurrently to verify that the server
+    starts successfully and all requests complete without errors.
     """
     model_path = f"{llm_models_root()}/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4"
     config_file = f"{serve_test_root}/test_configs/Nemotron-Super-120B-NVFP4.yml"
@@ -337,17 +335,24 @@ def test_nemotron_super_nvfp4(serve_test_root):
         threads = []
         # 1 long-prompt request + 3 short-prompt requests sent simultaneously.
         threads.append(
-            threading.Thread(target=_complete, args=("long_0", long_prompt)))
+            threading.Thread(name="long_0",
+                             target=_complete,
+                             args=("long_0", long_prompt),
+                             daemon=True))
         for i in range(3):
             threads.append(
-                threading.Thread(target=_complete,
-                                 args=(f"short_{i}", short_prompt)))
+                threading.Thread(name=f"short_{i}",
+                                 target=_complete,
+                                 args=(f"short_{i}", short_prompt),
+                                 daemon=True))
 
         for t in threads:
             t.start()
         for t in threads:
             t.join(timeout=300)
 
+        hung = [t.name for t in threads if t.is_alive()]
+        assert not hung, f"Timed out waiting for request threads: {hung}"
         assert not errors, f"Requests failed: {errors}"
         assert "long_0" in results, "Long prompt (chunked prefill) got no response"
         assert all(
