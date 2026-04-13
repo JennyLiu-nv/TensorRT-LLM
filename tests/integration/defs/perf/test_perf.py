@@ -1487,8 +1487,11 @@ class MultiMetricPerfTest(AbstractPerfScriptTestClass):
 
                 prompt = f"Summarize: {article}"
                 prompt_ids = tokenizer.encode(prompt, add_special_tokens=False)
-                if input_len > 0 and len(prompt_ids) > input_len:
-                    prompt_ids = prompt_ids[:input_len]
+                if input_len > 0:
+                    if len(prompt_ids) < input_len:
+                        continue
+                    if len(prompt_ids) > input_len:
+                        prompt_ids = prompt_ids[:input_len]
                 prompt_text = tokenizer.decode(prompt_ids,
                                                skip_special_tokens=False)
 
