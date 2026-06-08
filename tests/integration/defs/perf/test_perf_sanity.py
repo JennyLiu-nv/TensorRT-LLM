@@ -49,6 +49,7 @@ SUPPORTED_GPU_MAPPING = {
     "B200": "b200",
     "B300": "b300",
     "H200": "h200",
+    "GB10": "gb10",
 }
 
 BENCH_SERVING_REPO = "https://github.com/kedarpotdar-nv/bench_serving.git"
@@ -454,14 +455,28 @@ class ServerConfig:
         if numa_bind:
             numa_bind_cmd = ["numactl", "-m 0,1"]
 
-        cmd = numa_bind_cmd + [
-            "trtllm-serve",
-            self.model_path,
-            "--backend",
-            self.backend,
-            "--config",
-            config_path,
-        ]
+        # When total GPUs exceed a single node, launch via MPI for multi-node
+        # aggregated serving (e.g., DGX Spark with 1 GPU/node and tp=2).
+        mpi_cmd = []
+        if self.gpus > self.gpus_per_node:
+            mpi_cmd = ["mpirun", "-n", str(self.gpus), "--allow-run-as-root"]
+            for var in ["CPATH", "TRITON_PTXAS_PATH", "TRTLLM_LOG_LEVEL"]:
+                if os.getenv(var):
+                    mpi_cmd.extend(["-x", var])
+            mpi_cmd.append("trtllm-llmapi-launch")
+
+        cmd = (
+            numa_bind_cmd
+            + mpi_cmd
+            + [
+                "trtllm-serve",
+                self.model_path,
+                "--backend",
+                self.backend,
+                "--config",
+                config_path,
+            ]
+        )
         return cmd
 
     def to_env(self) -> Dict[str, str]:
