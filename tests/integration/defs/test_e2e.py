@@ -14,6 +14,7 @@
 # limitations under the License.
 import json
 import os
+import random
 import re
 import shutil
 import subprocess
@@ -1378,6 +1379,10 @@ def test_multi_nodes_eval(model_path: str, llm_api_config: Optional[dict[str,
 @pytest.mark.parametrize("model_path", [
     pytest.param('Qwen3/saved_models_Qwen3-235B-A22B_nvfp4_hf',
                  marks=skip_pre_blackwell),
+    'Qwen3.6-27B',
+    pytest.param('NVIDIA-Nemotron-3-Super-120B-A12B-FP8',
+                 marks=skip_pre_hopper),
+    'NVIDIA-Nemotron-3-Super-120B-A12B-BF16',
 ])
 def test_ptp_quickstart_advanced_multinode(llm_root, llm_venv, model_path,
                                            tp_size, pp_size):
@@ -1386,13 +1391,15 @@ def test_ptp_quickstart_advanced_multinode(llm_root, llm_venv, model_path,
     )
 
     from tensorrt_llm import LLM, SamplingParams
-    from tensorrt_llm.llmapi import CudaGraphConfig, KvCacheConfig
+    from tensorrt_llm.llmapi import CudaGraphConfig
 
     model_dir = f"{llm_models_root()}/{model_path}"
     prompt = "Explain why New York is great city to live in, in 1 short paragraph"
 
-    moe_ep_size = tp_size if ("Llama-4" in model_path
-                              or "Qwen3" in model_path) and tp_size > 1 else -1
+    is_moe = any(name in model_path
+                 for name in ("Llama-4", "Qwen3-235B", "Nemotron-3-Super"))
+    moe_ep_size = tp_size if is_moe and tp_size > 1 else -1
+    kv_cache_config = _multinode_kv_cache_config(model_path)
 
     with LLM(
             model=model_dir,
@@ -1403,8 +1410,7 @@ def test_ptp_quickstart_advanced_multinode(llm_root, llm_venv, model_path,
             max_num_tokens=4096,
             max_batch_size=1,
             cuda_graph_config=CudaGraphConfig(),
-            kv_cache_config=KvCacheConfig(
-                free_gpu_memory_fraction=_MEM_FRACTION_50),
+            kv_cache_config=kv_cache_config,
             moe_expert_parallel_size=moe_ep_size,
     ) as llm:
         outputs = llm.generate([prompt], SamplingParams(max_tokens=64))
@@ -1413,6 +1419,56 @@ def test_ptp_quickstart_advanced_multinode(llm_root, llm_venv, model_path,
         generated_text = output.outputs[0].text
         print(f"Generated text: {generated_text}")
         assert generated_text, f"No text generated for {model_path}"
+
+
+def _multinode_kv_cache_config(model_path):
+    from tensorrt_llm.llmapi import KvCacheConfig
+
+    kv_cache_kwargs = dict(free_gpu_memory_fraction=_MEM_FRACTION_50)
+    # Hybrid linear-attention/Mamba models keep a recurrent state per sequence,
+    # so run them without KV cache block reuse.
+    if "Qwen3.6" in model_path or "Nemotron-3-Super" in model_path:
+        kv_cache_kwargs["enable_block_reuse"] = False
+    if "Nemotron-3-Super" in model_path:
+        kv_cache_kwargs["mamba_ssm_cache_dtype"] = "float16"
+    return KvCacheConfig(**kv_cache_kwargs)
+
+
+@pytest.mark.skip_less_device_memory(80000)
+@pytest.mark.skip_less_mpi_world_size(2)
+@pytest.mark.parametrize("isl,osl", [(32768, 1024), (2048, 1024)],
+                         ids=["isl32k_osl1k", "isl2k_osl1k"])
+@pytest.mark.parametrize("tp_size,pp_size", [(2, 1), (1, 2)],
+                         ids=["tp2", "pp2"])
+@pytest.mark.parametrize("model_path", ['Qwen3.6-27B'])
+def test_ptp_multinode_isl_osl(model_path, tp_size, pp_size, isl, osl):
+    print(f"Testing {model_path} with tp_size={tp_size}, pp_size={pp_size}, "
+          f"isl={isl}, osl={osl}.")
+
+    from tensorrt_llm import LLM, SamplingParams
+    from tensorrt_llm.llmapi import CudaGraphConfig
+
+    # Random token ids from the regular vocabulary range give an exact ISL.
+    prompt_token_ids = random.Random(0).choices(range(1000, 20000), k=isl)
+
+    with LLM(
+            model=f"{llm_models_root()}/{model_path}",
+            tensor_parallel_size=tp_size,
+            pipeline_parallel_size=pp_size,
+            max_seq_len=isl + osl,
+            max_num_tokens=8192,
+            max_batch_size=1,
+            enable_chunked_prefill=True,
+            cuda_graph_config=CudaGraphConfig(),
+            kv_cache_config=_multinode_kv_cache_config(model_path),
+    ) as llm:
+        outputs = llm.generate([prompt_token_ids],
+                               SamplingParams(max_tokens=osl, ignore_eos=True))
+
+    output_token_ids = outputs[0].outputs[0].token_ids
+    print(f"Generated {len(output_token_ids)} tokens.")
+    assert len(output_token_ids) == osl, \
+        f"Expected {osl} output tokens, got {len(output_token_ids)}"
 
 
 @pytest.mark.skip_less_device(4)

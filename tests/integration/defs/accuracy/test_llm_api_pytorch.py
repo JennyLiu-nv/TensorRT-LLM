@@ -149,6 +149,7 @@ def _run_multinode_accuracy(model_path,
                             kv_cache_config=None,
                             max_num_tokens=4096,
                             max_batch_size=1,
+                            extra_evaluator_kwargs=None,
                             **llm_kwargs):
     benchmark_task_map = {
         "mmlu": MMLU,
@@ -177,7 +178,7 @@ def _run_multinode_accuracy(model_path,
             if task_cls is None:
                 raise ValueError(f"Unsupported benchmark: {benchmark}")
             task = task_cls(model_name)
-            task.evaluate(llm)
+            task.evaluate(llm, extra_evaluator_kwargs=extra_evaluator_kwargs)
 
 
 class TestMinistral8BInstruct(LlmapiAccuracyTestHarness):
@@ -6169,6 +6170,40 @@ class TestQwen3_8_Flash_Next(LlmapiAccuracyTestHarness):
                         mocker=mocker)
 
     @skip_pre_blackwell
+    @pytest.mark.skip_less_device_memory(100000)
+    @pytest.mark.parametrize("moe_backend", ["CUTLASS", "CUTEDSL"])
+    def test_nvfp4_1gpu_unified_memory(self, moe_backend: str,
+                                       monkeypatch: pytest.MonkeyPatch,
+                                       mocker) -> None:
+        """NVFP4 on one GPU without MTP, for unified-memory systems.
+
+        GPU and host share one memory pool, so there is no separate host
+        memory requirement for the offloaded PLE table.
+        """
+        self._run_evals(f"{llm_models_root()}/Qwen3.8-Flash-Next-NVFP4",
+                        tensor_parallel_size=1,
+                        moe_backend=moe_backend,
+                        max_draft_len=None,
+                        expected_quant_algo=QuantAlgo.MIXED_PRECISION,
+                        monkeypatch=monkeypatch,
+                        mocker=mocker)
+
+    @skip_pre_blackwell
+    @pytest.mark.skip_less_mpi_world_size(2)
+    @pytest.mark.skip_less_device_memory(100000)
+    def test_fp8_tep2_cutlass(self, monkeypatch: pytest.MonkeyPatch,
+                              mocker) -> None:
+        """Block-FP8 TEP2 without MTP, one GPU per node across two nodes."""
+        self._run_evals(f"{llm_models_root()}/Qwen3.8-Flash-Next-FP8",
+                        tensor_parallel_size=2,
+                        moe_backend="CUTLASS",
+                        max_draft_len=None,
+                        expected_quant_algo=QuantAlgo.FP8_BLOCK_SCALES,
+                        monkeypatch=monkeypatch,
+                        mocker=mocker,
+                        moe_expert_parallel_size=2)
+
+    @skip_pre_blackwell
     @pytest.mark.skip_less_device(4)
     @pytest.mark.skip_less_device_memory(70000)
     @pytest.mark.skip_less_host_memory(131072)
@@ -6757,6 +6792,32 @@ class TestNemotronV3Super(LlmapiAccuracyTestHarness):
             task = GSM8K(self.MODEL_NAME)
             task.evaluate(llm,
                           extra_evaluator_kwargs=self.EXTRA_EVALUATOR_KWARGS)
+
+    @skip_pre_hopper
+    @pytest.mark.skip_less_mpi_world_size(2)
+    @pytest.mark.parametrize("tp_size,pp_size,ep_size", [(2, 1, 2), (1, 2, 1)],
+                             ids=["tp2", "pp2"])
+    @pytest.mark.parametrize("model_dir", [
+        "NVIDIA-Nemotron-3-Super-120B-A12B-BF16",
+        "NVIDIA-Nemotron-3-Super-120B-A12B-FP8"
+    ],
+                             ids=["bf16", "fp8"])
+    def test_2gpus(self, model_dir, tp_size, pp_size, ep_size):
+        _run_multinode_accuracy(
+            f"{llm_models_root()}/{model_dir}",
+            self.MODEL_NAME,
+            benchmarks=["mmlu"],
+            tp_size=tp_size,
+            pp_size=pp_size,
+            ep_size=ep_size,
+            kv_cache_config=KvCacheConfig(
+                enable_block_reuse=False,
+                mamba_ssm_cache_dtype="float16",
+                free_gpu_memory_fraction=0.5,
+            ),
+            extra_evaluator_kwargs=self.EXTRA_EVALUATOR_KWARGS,
+            cuda_graph_config=CudaGraphConfig(),
+            moe_config=MoeConfig(backend="CUTLASS"))
 
     @skip_pre_blackwell
     @pytest.mark.parametrize(
