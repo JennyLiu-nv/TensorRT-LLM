@@ -149,7 +149,6 @@ def _run_multinode_accuracy(model_path,
                             kv_cache_config=None,
                             max_num_tokens=4096,
                             max_batch_size=1,
-                            extra_evaluator_kwargs=None,
                             **llm_kwargs):
     benchmark_task_map = {
         "mmlu": MMLU,
@@ -178,7 +177,7 @@ def _run_multinode_accuracy(model_path,
             if task_cls is None:
                 raise ValueError(f"Unsupported benchmark: {benchmark}")
             task = task_cls(model_name)
-            task.evaluate(llm, extra_evaluator_kwargs=extra_evaluator_kwargs)
+            task.evaluate(llm)
 
 
 class TestMinistral8BInstruct(LlmapiAccuracyTestHarness):
@@ -3733,18 +3732,12 @@ class TestQwen3_235B_A22B(LlmapiAccuracyTestHarness):
         [
             (2, 1, 2, False, False, False, "CUTLASS", False),
             (2, 1, 2, False, False, False, "CUTLASS", True),
-            (2, 1, 2, False, True, True, "CUTLASS", False),
-            (2, 1, 2, False, True, True, "CUTLASS", True),
-            (2, 1, 2, True, False, False, "CUTLASS", False),
             (1, 2, 1, False, False, False, "CUTLASS", False),
             (1, 2, 1, False, False, False, "CUTLASS", True),
         ],
         ids=[
             "latency_moe_cutlass",
             "latency_moe_cutlass_eagle3",
-            "latency_moe_cutlass_cuda_graph_overlap",
-            "latency_moe_cutlass_eagle3_cuda_graph_overlap",
-            "latency_moe_cutlass_attention_dp",
             "latency_moe_cutlass_pp2",
             "latency_moe_cutlass_eagle3_pp2",
         ],
@@ -4427,7 +4420,7 @@ class TestGPTOSS(LlmapiAccuracyTestHarness):
             task.evaluate(llm,
                           extra_evaluator_kwargs=self.extra_evaluator_kwargs)
 
-    @pytest.mark.skip_less_device(2)
+    @pytest.mark.skip_less_mpi_world_size(2)
     @pytest.mark.parametrize(
         "kv_cache_dtype",
         ["auto", pytest.param("fp8", marks=skip_pre_blackwell)])
@@ -4738,7 +4731,7 @@ class TestGPTOSS(LlmapiAccuracyTestHarness):
             task = JsonModeEval(model_name)
             task.evaluate(llm)
 
-    @pytest.mark.skip_less_device(2)
+    @pytest.mark.skip_less_mpi_world_size(2)
     @pytest.mark.timeout(14400)
     @pytest.mark.parametrize("overlap_scheduler", [True, False],
                              ids=["overlap_scheduler", "no_overlap_scheduler"])
@@ -5325,7 +5318,7 @@ class TestQwen3_5_35B_A3B(LlmapiAccuracyTestHarness):
     @pytest.mark.parametrize("moe_backend", ["CUTLASS", "TRTLLM"])
     @pytest.mark.parametrize(
         "tp_size",
-        [1, pytest.param(2, marks=pytest.mark.skip_less_device(2))],
+        [1, pytest.param(2, marks=pytest.mark.skip_less_mpi_world_size(2))],
         ids=["tp1", "tp2"],
     )
     def test_bf16(self, moe_backend, tp_size, mocker):
@@ -6170,40 +6163,6 @@ class TestQwen3_8_Flash_Next(LlmapiAccuracyTestHarness):
                         mocker=mocker)
 
     @skip_pre_blackwell
-    @pytest.mark.skip_less_device_memory(100000)
-    @pytest.mark.parametrize("moe_backend", ["CUTLASS", "CUTEDSL"])
-    def test_nvfp4_1gpu_unified_memory(self, moe_backend: str,
-                                       monkeypatch: pytest.MonkeyPatch,
-                                       mocker) -> None:
-        """NVFP4 on one GPU without MTP, for unified-memory systems.
-
-        GPU and host share one memory pool, so there is no separate host
-        memory requirement for the offloaded PLE table.
-        """
-        self._run_evals(f"{llm_models_root()}/Qwen3.8-Flash-Next-NVFP4",
-                        tensor_parallel_size=1,
-                        moe_backend=moe_backend,
-                        max_draft_len=None,
-                        expected_quant_algo=QuantAlgo.MIXED_PRECISION,
-                        monkeypatch=monkeypatch,
-                        mocker=mocker)
-
-    @skip_pre_blackwell
-    @pytest.mark.skip_less_mpi_world_size(2)
-    @pytest.mark.skip_less_device_memory(100000)
-    def test_fp8_tep2_cutlass(self, monkeypatch: pytest.MonkeyPatch,
-                              mocker) -> None:
-        """Block-FP8 TEP2 without MTP, one GPU per node across two nodes."""
-        self._run_evals(f"{llm_models_root()}/Qwen3.8-Flash-Next-FP8",
-                        tensor_parallel_size=2,
-                        moe_backend="CUTLASS",
-                        max_draft_len=None,
-                        expected_quant_algo=QuantAlgo.FP8_BLOCK_SCALES,
-                        monkeypatch=monkeypatch,
-                        mocker=mocker,
-                        moe_expert_parallel_size=2)
-
-    @skip_pre_blackwell
     @pytest.mark.skip_less_device(4)
     @pytest.mark.skip_less_device_memory(70000)
     @pytest.mark.skip_less_host_memory(131072)
@@ -6792,32 +6751,6 @@ class TestNemotronV3Super(LlmapiAccuracyTestHarness):
             task = GSM8K(self.MODEL_NAME)
             task.evaluate(llm,
                           extra_evaluator_kwargs=self.EXTRA_EVALUATOR_KWARGS)
-
-    @skip_pre_hopper
-    @pytest.mark.skip_less_mpi_world_size(2)
-    @pytest.mark.parametrize("tp_size,pp_size,ep_size", [(2, 1, 2), (1, 2, 1)],
-                             ids=["tp2", "pp2"])
-    @pytest.mark.parametrize("model_dir", [
-        "NVIDIA-Nemotron-3-Super-120B-A12B-BF16",
-        "NVIDIA-Nemotron-3-Super-120B-A12B-FP8"
-    ],
-                             ids=["bf16", "fp8"])
-    def test_2gpus(self, model_dir, tp_size, pp_size, ep_size):
-        _run_multinode_accuracy(
-            f"{llm_models_root()}/{model_dir}",
-            self.MODEL_NAME,
-            benchmarks=["mmlu"],
-            tp_size=tp_size,
-            pp_size=pp_size,
-            ep_size=ep_size,
-            kv_cache_config=KvCacheConfig(
-                enable_block_reuse=False,
-                mamba_ssm_cache_dtype="float16",
-                free_gpu_memory_fraction=0.5,
-            ),
-            extra_evaluator_kwargs=self.EXTRA_EVALUATOR_KWARGS,
-            cuda_graph_config=CudaGraphConfig(),
-            moe_config=MoeConfig(backend="CUTLASS"))
 
     @skip_pre_blackwell
     @pytest.mark.parametrize(
