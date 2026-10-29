@@ -549,6 +549,20 @@ def get_model_yaml_config(model_label: str,
                 'enable_attention_dp': True,
             }
         },
+        # DGX Spark long-context cases: prefill longer prompts in 8192-token
+        # chunks instead of one step sized to the whole prompt.
+        {
+            'patterns': [
+                'maxnt:8192-input_output_len:16384,',
+                'maxnt:8192-input_output_len:32768,',
+                'maxnt:8192-input_output_len:65536,',
+                'maxnt:8192-input_output_len:120000,',
+                'maxnt:8192-kv_frac:0.5-input_output_len:32768,',
+            ],
+            'config': {
+                'enable_chunked_prefill': True,
+            }
+        },
         # Qwen3.6-35B-A3B NVFP4 GDN-attn MoE: trust_remote_code, TRTLLM-Gen NVFP4 MoE (SM100/103), block reuse off.
         {
             'patterns': ['qwen3.6_35b_a3b_fp4'],
