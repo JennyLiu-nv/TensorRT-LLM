@@ -3732,12 +3732,14 @@ class TestQwen3_235B_A22B(LlmapiAccuracyTestHarness):
         [
             (2, 1, 2, False, False, False, "CUTLASS", False),
             (2, 1, 2, False, False, False, "CUTLASS", True),
+            (2, 1, 2, True, False, False, "CUTLASS", False),
             (1, 2, 1, False, False, False, "CUTLASS", False),
             (1, 2, 1, False, False, False, "CUTLASS", True),
         ],
         ids=[
             "latency_moe_cutlass",
             "latency_moe_cutlass_eagle3",
+            "latency_moe_cutlass_attention_dp",
             "latency_moe_cutlass_pp2",
             "latency_moe_cutlass_eagle3_pp2",
         ],
