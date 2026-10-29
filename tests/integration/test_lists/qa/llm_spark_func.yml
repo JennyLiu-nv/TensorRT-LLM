@@ -170,6 +170,14 @@ llm_spark_func:
   - accuracy/test_llm_api_pytorch.py::TestQwen3_235B_A22B::test_nvfp4_2gpus[latency_moe_cutlass_attention_dp]
   - accuracy/test_llm_api_pytorch.py::TestQwen3_235B_A22B::test_nvfp4_2gpus[latency_moe_cutlass_pp2]
   - accuracy/test_llm_api_pytorch.py::TestQwen3_235B_A22B::test_nvfp4_2gpus[latency_moe_cutlass_eagle3_pp2]
+  # Qwen3-30B-A3B has the Qwen3-235B MoE architecture and fits 2x 64GB nodes.
+  # cuda_graph / overlap split the cuda_graph_overlap hang seen on Qwen3-235B;
+  # attention_dp is expected to fail until the NcclEP fallback is fixed.
+  - accuracy/test_llm_api_pytorch.py::TestQwen3_30B_A3B::test_nvfp4_2gpus[latency_moe_cutlass]
+  - accuracy/test_llm_api_pytorch.py::TestQwen3_30B_A3B::test_nvfp4_2gpus[latency_moe_cutlass_cuda_graph_overlap]
+  - accuracy/test_llm_api_pytorch.py::TestQwen3_30B_A3B::test_nvfp4_2gpus[latency_moe_cutlass_cuda_graph]
+  - accuracy/test_llm_api_pytorch.py::TestQwen3_30B_A3B::test_nvfp4_2gpus[latency_moe_cutlass_overlap]
+  - accuracy/test_llm_api_pytorch.py::TestQwen3_30B_A3B::test_nvfp4_2gpus[latency_moe_cutlass_attention_dp]
   - test_e2e.py::test_ptp_quickstart_advanced_multinode[Qwen3.6-27B-tp2]
   - test_e2e.py::test_ptp_quickstart_advanced_multinode[Qwen3.6-27B-pp2]
   - test_e2e.py::test_ptp_quickstart_advanced_multinode[NVIDIA-Nemotron-3-Super-120B-A12B-FP8-tp2]
