@@ -1385,6 +1385,9 @@ def test_multi_nodes_eval(model_path: str, llm_api_config: Optional[dict[str,
 @pytest.mark.parametrize("model_path", [
     pytest.param('Qwen3/saved_models_Qwen3-235B-A22B_nvfp4_hf',
                  marks=skip_pre_blackwell),
+    'Qwen3.6-27B',
+    pytest.param('NVIDIA-Nemotron-3-Super-120B-A12B-FP8',
+                 marks=skip_pre_hopper),
 ])
 def test_ptp_quickstart_advanced_multinode(llm_root, llm_venv, model_path,
                                            tp_size, pp_size):
@@ -1398,8 +1401,17 @@ def test_ptp_quickstart_advanced_multinode(llm_root, llm_venv, model_path,
     model_dir = f"{llm_models_root()}/{model_path}"
     prompt = "Explain why New York is great city to live in, in 1 short paragraph"
 
-    moe_ep_size = tp_size if ("Llama-4" in model_path
-                              or "Qwen3" in model_path) and tp_size > 1 else -1
+    is_moe = any(name in model_path
+                 for name in ("Llama-4", "Qwen3-235B", "Nemotron-3-Super"))
+    moe_ep_size = tp_size if is_moe and tp_size > 1 else -1
+
+    kv_cache_kwargs = dict(free_gpu_memory_fraction=_MEM_FRACTION_50)
+    # Hybrid linear-attention/Mamba models keep a recurrent state per sequence,
+    # so run them without KV cache block reuse.
+    if "Qwen3.6" in model_path or "Nemotron-3-Super" in model_path:
+        kv_cache_kwargs["enable_block_reuse"] = False
+    if "Nemotron-3-Super" in model_path:
+        kv_cache_kwargs["mamba_ssm_cache_dtype"] = "float16"
 
     with LLM(
             model=model_dir,
@@ -1410,8 +1422,7 @@ def test_ptp_quickstart_advanced_multinode(llm_root, llm_venv, model_path,
             max_num_tokens=4096,
             max_batch_size=1,
             cuda_graph_config=CudaGraphConfig(),
-            kv_cache_config=KvCacheConfig(
-                free_gpu_memory_fraction=_MEM_FRACTION_50),
+            kv_cache_config=KvCacheConfig(**kv_cache_kwargs),
             moe_expert_parallel_size=moe_ep_size,
     ) as llm:
         outputs = llm.generate([prompt], SamplingParams(max_tokens=64))
