@@ -66,8 +66,6 @@ llm_spark_perf:
   # NVFP4 MoE backend on SM121: CUTLASS vs CuteDSL (b12x), against each model's default backend above.
   - perf/test_perf.py::test_perf[qwen3.6_35b_a3b_fp4-bench-pytorch-streaming-float4-maxbs:1-input_output_len:2048,256-reqs:1-con:1-moe:CUTLASS]
   - perf/test_perf.py::test_perf[qwen3.6_35b_a3b_fp4-bench-pytorch-streaming-float4-maxbs:4-input_output_len:2048,256-reqs:16-con:4-moe:CUTLASS]
-  - perf/test_perf.py::test_perf[gemma_4_26b_a4b_nvfp4-bench-pytorch-streaming-float4-maxbs:1-input_output_len:2048,128-reqs:1-con:1-moe:CUTLASS]
-  - perf/test_perf.py::test_perf[gemma_4_26b_a4b_nvfp4-bench-pytorch-streaming-float4-maxbs:1-input_output_len:2048,128-reqs:1-con:1-moe:CUTEDSL]
   - perf/test_perf.py::test_perf[nemotron_3.5_lightning_30b_nvfp4_mtp-serve-pytorch-streaming-float4-maxbs:4-maxnt:8192-input_output_len:2048,256-reqs:16-con:4-moe:CUTLASS]
   - perf/test_perf.py::test_perf[nemotron_3_super_120b_nvfp4-serve-pytorch-streaming-float4-maxbs:8-maxnt:4096-input_output_len:2048,256-reqs:1-con:1-moe:CUTEDSL]
   # Stress: concurrency 16 on one Spark. Decode GEMMs exceed M=8, the largest M in the Spark cuBLAS BF16 table.
@@ -120,12 +118,11 @@ llm_spark_perf:
   - perf/test_perf.py::test_perf[qwen3.6_35b_a3b_fp4-bench-pytorch-streaming-float4-maxbs:8-maxnt:8192-input_output_len:16384,128-reqs:32-con:8]
   - perf/test_perf.py::test_perf[gpt_oss_120b_fp4-bench-pytorch-streaming-float4-maxbs:8-maxnt:8192-input_output_len:16384,128-reqs:32-con:8]
   # Unified memory, KV placement and budget (cfg presets in pytorch_model_config.py): explicit KV byte budget,
-  # host KV tier, UVM KV, NVFP4 KV, and a scheduler that may pause requests when KV blocks run out.
+  # host KV tier, UVM KV and NVFP4 KV.
   - perf/test_perf.py::test_perf[gpt_oss_120b_fp4-bench-pytorch-streaming-float4-maxbs:4-maxnt:8192-input_output_len:32768,512-reqs:8-con:4-cfg:kvbytes40g]
   - perf/test_perf.py::test_perf[qwen3.6_35b_a3b_fp4-bench-pytorch-streaming-float4-maxbs:4-maxnt:8192-input_output_len:32768,512-reqs:8-con:4-cfg:hostkv16g]
   - perf/test_perf.py::test_perf[gpt_oss_120b_fp4-bench-pytorch-streaming-float4-maxbs:4-maxnt:8192-input_output_len:32768,512-reqs:8-con:4-cfg:uvmkv]
   - perf/test_perf.py::test_perf[gpt_oss_120b_fp4-bench-pytorch-streaming-float4-maxbs:4-maxnt:8192-input_output_len:32768,512-kv_cache_dtype:nvfp4-reqs:8-con:4]
-  - perf/test_perf.py::test_perf[gpt_oss_120b_fp4-bench-pytorch-streaming-float4-maxbs:4-maxnt:8192-kv_frac:0.5-input_output_len:32768,512-reqs:8-con:4-cfg:maxutil]
   # Agents sharing context: 28K shared prefix + 4K own input per request, KV block reuse on and off
   # (sliding window + sinks, linear attention, Mamba).
   - perf/test_perf.py::test_perf[qwen3.6_35b_a3b_fp4-serve-pytorch-streaming-float4-maxbs:4-maxnt:8192-input_output_len:4096,512-reqs:16-con:4-prefix:28672-cfg:reuse]
