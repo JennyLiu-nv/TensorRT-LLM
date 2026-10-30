@@ -17,17 +17,89 @@
 Model PyTorch YAML config for trtllm-bench performance tests.
 """
 
+import copy
+
 from ..conftest import llm_models_root
 
 # DeepSeek FP8 (block-scale) models that hit the DeepGEMM-on-Hopper-only
 # limitation when the default CUTLASS MoE backend is used on Blackwell.
-# On SM100+ these need ``moe_config.backend: DEEPGEMM`` instead, otherwise
-# CutlassFp8BlockScaleGemmRunner -> deep_gemm::jit::Compiler::build throws
-# "DeepGEMM only supports Hopper (SM90)".
+# On SM100/103/107 these need ``moe_config.backend: DEEPGEMM`` instead,
+# otherwise CutlassFp8BlockScaleGemmRunner -> deep_gemm::jit::Compiler::build
+# throws "DeepGEMM only supports Hopper (SM90)". DeepGEMM does not run on
+# SM120/121, which serve FP8 block scales with the CUTLASS backend.
 _DEEPSEEK_FP8_BLOCK_SCALE_MODELS = (
     'deepseek_v3_lite_fp8',
     'deepseek_r1_0528_fp8',
 )
+
+# Named LLM API overrides, selected by the "cfg:<name>[+<name>...]" test-name
+# label and applied after every other rule in get_model_yaml_config().
+PERF_CONFIG_PRESETS = {
+    # Runtime features: CUDA graphs, overlap scheduler, autotuner, attention backend.
+    'nocg': {
+        'cuda_graph_config': None
+    },
+    'nooverlap': {
+        'disable_overlap_scheduler': True
+    },
+    'notune': {
+        'enable_autotuner': False
+    },
+    'flashinfer': {
+        'attn_backend': 'FLASHINFER'
+    },
+    # Dense NVFP4 GEMMs restricted to a single backend.
+    'fp4gemm_cutlass': {
+        'nvfp4_gemm_config': {
+            'allowed_backends': ['cutlass']
+        }
+    },
+    'fp4gemm_cublaslt': {
+        'nvfp4_gemm_config': {
+            'allowed_backends': ['cublaslt']
+        }
+    },
+    # Capacity scheduler that may pause running requests when KV blocks run out.
+    'maxutil': {
+        'scheduler_config': {
+            'capacity_scheduler_policy': 'MAX_UTILIZATION'
+        }
+    },
+    # KV cache block reuse (prefix caching) on or off.
+    'reuse': {
+        'kv_cache_config': {
+            'enable_block_reuse': True
+        }
+    },
+    'noreuse': {
+        'kv_cache_config': {
+            'enable_block_reuse': False
+        }
+    },
+    # KV cache memory: byte budget, host tier, and UVM allocation.
+    'kvbytes40g': {
+        'kv_cache_config': {
+            'max_gpu_total_bytes': 40 << 30
+        }
+    },
+    'hostkv16g': {
+        'kv_cache_config': {
+            'host_cache_size': 16 << 30
+        }
+    },
+    'uvmkv': {
+        'kv_cache_config': {
+            'use_uvm': True
+        }
+    },
+    # MTP drafting three tokens per step.
+    'mtp3': {
+        'speculative_config': {
+            'decoding_type': 'MTP',
+            'max_draft_len': 3
+        }
+    },
+}
 
 
 def _get_sm_version_safe() -> int:
@@ -551,6 +623,7 @@ def get_model_yaml_config(model_label: str,
         },
         # DGX Spark long-context cases: prefill longer prompts in 8192-token
         # chunks instead of one step sized to the whole prompt.
+        # Shared-prefix serve cases prefill the prefix plus the input the same way.
         {
             'patterns': [
                 'maxnt:8192-input_output_len:16384,',
@@ -558,6 +631,7 @@ def get_model_yaml_config(model_label: str,
                 'maxnt:8192-input_output_len:65536,',
                 'maxnt:8192-input_output_len:120000,',
                 'maxnt:8192-kv_frac:0.5-input_output_len:32768,',
+                '-prefix:',
             ],
             'config': {
                 'enable_chunked_prefill': True,
@@ -578,7 +652,10 @@ def get_model_yaml_config(model_label: str,
         },
         # Qwen3.6-35B-A3B NVFP4 streaming (Spark) cases: CuteDSL MoE, FP8 KV cache with block reuse.
         {
-            'patterns': ['qwen3.6_35b_a3b_fp4-bench-pytorch-streaming'],
+            'patterns': [
+                'qwen3.6_35b_a3b_fp4-bench-pytorch-streaming',
+                'qwen3.6_35b_a3b_fp4-serve-pytorch-streaming',
+            ],
             'config': {
                 'trust_remote_code': True,
                 'kv_cache_config': {
@@ -603,7 +680,10 @@ def get_model_yaml_config(model_label: str,
         },
         # Qwen3.6-35B-A3B NVFP4 one-model MTP drafting
         {
-            'patterns': ['qwen3.6_35b_a3b_fp4_mtp-bench-pytorch-streaming'],
+            'patterns': [
+                'qwen3.6_35b_a3b_fp4_mtp-bench-pytorch-streaming',
+                'qwen3.6_35b_a3b_fp4_mtp-serve-pytorch-streaming',
+            ],
             'config': {
                 'trust_remote_code': True,
                 'moe_config': {
@@ -714,6 +794,7 @@ def get_model_yaml_config(model_label: str,
         {
             'patterns': [
                 'gpt_oss_120b_eagle3-bench-pytorch',
+                'gpt_oss_120b_eagle3-serve-pytorch',
             ],
             'config': {
                 'enable_attention_dp': False,
@@ -961,13 +1042,13 @@ def get_model_yaml_config(model_label: str,
                     recursive_update(base_config, pattern_config['config'])
                 break  # Stop checking other patterns for this config once we find a match
 
-    # DeepSeek FP8 (block-scale) models on Blackwell (SM100+) must use the
+    # DeepSeek FP8 (block-scale) models on SM100/103/107 must use the
     # DEEPGEMM MoE backend; the default CUTLASS backend's FP8 block-scale path
     # JIT-compiles DeepGEMM kernels that only target Hopper (SM90).
     if 'pytorch' in model_label and any(
             name in model_label.lower()
             for name in _DEEPSEEK_FP8_BLOCK_SCALE_MODELS):
-        if _get_sm_version_safe() >= 100:
+        if 100 <= _get_sm_version_safe() < 120:
             moe_config = base_config.setdefault('moe_config', {})
             moe_config.setdefault('backend', 'DEEPGEMM')
 
@@ -975,6 +1056,12 @@ def get_model_yaml_config(model_label: str,
     # GPUs keep the model's own get_model_defaults() choice.
     if 'gemma_4_' in model_label.lower() and _get_sm_version_safe() == 121:
         base_config['attn_backend'] = 'FLASHINFER'
+
+    for label in model_label.split('-'):
+        if label.startswith('cfg:'):
+            for preset in label.removeprefix('cfg:').split('+'):
+                recursive_update(base_config,
+                                 copy.deepcopy(PERF_CONFIG_PRESETS[preset]))
 
     # lora-specific change for pytorch
     if 'pytorch' in model_label and 'loras' in model_label:
