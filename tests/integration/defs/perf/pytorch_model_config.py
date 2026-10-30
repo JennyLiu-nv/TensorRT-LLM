@@ -65,10 +65,15 @@ PERF_CONFIG_PRESETS = {
             'capacity_scheduler_policy': 'MAX_UTILIZATION'
         }
     },
-    # KV cache block reuse (prefix caching) on or off.
+    # KV cache block reuse (prefix caching) on or off. Hybrid linear-attention
+    # and Mamba models reuse a prefix only up to a recurrent-state snapshot,
+    # taken here every 8192 tokens (the long-context prefill chunk size).
     'reuse': {
         'kv_cache_config': {
-            'enable_block_reuse': True
+            'enable_block_reuse': True,
+            'mamba_state_config': {
+                'periodic_snapshot_interval': 8192
+            }
         }
     },
     'noreuse': {
