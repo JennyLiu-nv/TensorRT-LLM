@@ -59,12 +59,6 @@ PERF_CONFIG_PRESETS = {
             'allowed_backends': ['cublaslt']
         }
     },
-    # Capacity scheduler that may pause running requests when KV blocks run out.
-    'maxutil': {
-        'scheduler_config': {
-            'capacity_scheduler_policy': 'MAX_UTILIZATION'
-        }
-    },
     # KV cache block reuse (prefix caching) on or off. Hybrid linear-attention
     # and Mamba models reuse a prefix only up to a recurrent-state snapshot,
     # taken here every 8192 tokens (the long-context prefill chunk size).
