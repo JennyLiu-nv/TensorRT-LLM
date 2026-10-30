@@ -3416,6 +3416,43 @@ class TestQwen3_30B_A3B(LlmapiAccuracyTestHarness):
             task = GSM8K(self.MODEL_NAME)
             task.evaluate(llm)
 
+    @skip_pre_blackwell
+    @pytest.mark.skip_less_mpi_world_size(2)
+    @pytest.mark.parametrize(
+        "tp_size,pp_size,ep_size,attention_dp,cuda_graph,overlap_scheduler",
+        [
+            (2, 1, 2, False, False, False),
+            (2, 1, 2, False, True, True),
+            (2, 1, 2, False, True, False),
+            (2, 1, 2, False, False, True),
+            (2, 1, 2, True, False, False),
+        ],
+        ids=[
+            "latency_moe_cutlass",
+            "latency_moe_cutlass_cuda_graph_overlap",
+            "latency_moe_cutlass_cuda_graph",
+            "latency_moe_cutlass_overlap",
+            "latency_moe_cutlass_attention_dp",
+        ],
+    )
+    def test_nvfp4_2gpus(self, tp_size, pp_size, ep_size, attention_dp,
+                         cuda_graph, overlap_scheduler):
+        pytorch_config = dict(
+            disable_overlap_scheduler=not overlap_scheduler,
+            cuda_graph_config=CudaGraphConfig() if cuda_graph else None,
+            moe_config=MoeConfig(backend="CUTLASS"))
+
+        _run_multinode_accuracy(
+            f"{llm_models_root()}/Qwen3/saved_models_Qwen3-30B-A3B_nvfp4_hf",
+            self.MODEL_NAME,
+            benchmarks=["mmlu"],
+            tp_size=tp_size,
+            pp_size=pp_size,
+            ep_size=ep_size,
+            kv_cache_config=KvCacheConfig(free_gpu_memory_fraction=0.4),
+            enable_attention_dp=attention_dp,
+            **pytorch_config)
+
     @skip_pre_hopper
     @skip_post_blackwell
     @pytest.mark.parametrize(
@@ -3733,10 +3770,16 @@ class TestQwen3_235B_A22B(LlmapiAccuracyTestHarness):
         [
             (2, 1, 2, False, False, False, "CUTLASS", False),
             (2, 1, 2, False, False, False, "CUTLASS", True),
+            (2, 1, 2, True, False, False, "CUTLASS", False),
+            (1, 2, 1, False, False, False, "CUTLASS", False),
+            (1, 2, 1, False, False, False, "CUTLASS", True),
         ],
         ids=[
             "latency_moe_cutlass",
             "latency_moe_cutlass_eagle3",
+            "latency_moe_cutlass_attention_dp",
+            "latency_moe_cutlass_pp2",
+            "latency_moe_cutlass_eagle3_pp2",
         ],
     )
     def test_nvfp4_2gpus(self, tp_size, pp_size, ep_size, attention_dp,
@@ -4417,7 +4460,7 @@ class TestGPTOSS(LlmapiAccuracyTestHarness):
             task.evaluate(llm,
                           extra_evaluator_kwargs=self.extra_evaluator_kwargs)
 
-    @pytest.mark.skip_less_device(2)
+    @pytest.mark.skip_less_mpi_world_size(2)
     @pytest.mark.parametrize(
         "kv_cache_dtype",
         ["auto", pytest.param("fp8", marks=skip_pre_blackwell)])
@@ -4728,7 +4771,7 @@ class TestGPTOSS(LlmapiAccuracyTestHarness):
             task = JsonModeEval(model_name)
             task.evaluate(llm)
 
-    @pytest.mark.skip_less_device(2)
+    @pytest.mark.skip_less_mpi_world_size(2)
     @pytest.mark.timeout(14400)
     @pytest.mark.parametrize("overlap_scheduler", [True, False],
                              ids=["overlap_scheduler", "no_overlap_scheduler"])
@@ -5315,7 +5358,7 @@ class TestQwen3_5_35B_A3B(LlmapiAccuracyTestHarness):
     @pytest.mark.parametrize("moe_backend", ["CUTLASS", "TRTLLM"])
     @pytest.mark.parametrize(
         "tp_size",
-        [1, pytest.param(2, marks=pytest.mark.skip_less_device(2))],
+        [1, pytest.param(2, marks=pytest.mark.skip_less_mpi_world_size(2))],
         ids=["tp1", "tp2"],
     )
     def test_bf16(self, moe_backend, tp_size, mocker):

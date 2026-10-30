@@ -798,7 +798,7 @@ class PerfTestConfig:
         # Validate dtype.
         VALID_DTYPES = ["float32", "float16", "bfloat16", "float8", "float4"]
         assert self.data_type in VALID_DTYPES, f"Invalid data_type {self.data_type}!"
-        VALID_KV_CACHE_DTYPES = ["auto", "fp8"]
+        VALID_KV_CACHE_DTYPES = ["auto", "fp8", "nvfp4"]
         assert self.kv_cache_dtype in VALID_KV_CACHE_DTYPES, f"Invalid kv_cache_dtype {self.kv_cache_dtype}!"
 
         if self.prefix_len > 0:
