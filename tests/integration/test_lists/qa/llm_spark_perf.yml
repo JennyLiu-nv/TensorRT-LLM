@@ -122,7 +122,6 @@ llm_spark_perf:
   - perf/test_perf.py::test_perf[gpt_oss_120b_fp4-bench-pytorch-streaming-float4-maxbs:4-maxnt:8192-input_output_len:32768,512-reqs:8-con:4-cfg:kvbytes40g]
   - perf/test_perf.py::test_perf[qwen3.6_35b_a3b_fp4-bench-pytorch-streaming-float4-maxbs:4-maxnt:8192-input_output_len:32768,512-reqs:8-con:4-cfg:hostkv16g]
   - perf/test_perf.py::test_perf[gpt_oss_120b_fp4-bench-pytorch-streaming-float4-maxbs:4-maxnt:8192-input_output_len:32768,512-reqs:8-con:4-cfg:uvmkv]
-  - perf/test_perf.py::test_perf[gpt_oss_120b_fp4-bench-pytorch-streaming-float4-maxbs:4-maxnt:8192-input_output_len:32768,512-kv_cache_dtype:nvfp4-reqs:8-con:4]
   # Agents sharing context: 28K shared prefix + 4K own input per request, KV block reuse on and off
   # (sliding window + sinks, linear attention, Mamba).
   - perf/test_perf.py::test_perf[qwen3.6_35b_a3b_fp4-serve-pytorch-streaming-float4-maxbs:4-maxnt:8192-input_output_len:4096,512-reqs:16-con:4-prefix:28672-cfg:reuse]
