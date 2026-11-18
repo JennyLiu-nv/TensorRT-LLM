@@ -6398,6 +6398,18 @@ class TestQwen3_8_27B(LlmapiAccuracyTestHarness):
     def test_nvfp4(self):
         self._evaluate_gsm8k(f"{llm_models_root()}/Qwen3.8-27B-NVFP4")
 
+    @skip_pre_blackwell
+    @pytest.mark.skip_less_mpi_world_size(2)
+    def test_nvfp4_2gpus(self):
+        self._evaluate_gsm8k(f"{llm_models_root()}/Qwen3.8-27B-NVFP4",
+                             tensor_parallel_size=2)
+
+    @skip_pre_blackwell
+    @pytest.mark.skip_less_mpi_world_size(4)
+    def test_nvfp4_4gpus(self):
+        self._evaluate_gsm8k(f"{llm_models_root()}/Qwen3.8-27B-NVFP4",
+                             tensor_parallel_size=4)
+
     @pytest.mark.skip_less_mpi_world_size(2)
     def test_auto_dtype_2gpus(self):
         self._evaluate_gsm8k(self.MODEL_PATH, tensor_parallel_size=2)

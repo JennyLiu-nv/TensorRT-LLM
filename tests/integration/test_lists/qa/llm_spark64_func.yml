@@ -38,4 +38,16 @@ llm_spark64_func:
         lte: 2
   tests:
   - accuracy/test_llm_api_pytorch.py::TestQwen3_8_27B::test_auto_dtype_2gpus
+  - accuracy/test_llm_api_pytorch.py::TestQwen3_8_27B::test_nvfp4_2gpus
   - accuracy/test_llm_api_pytorch.py::TestGPTOSS::test_w4_2gpus[tp2-cutlass-auto]
+# ===============================================================================
+# 3: Multi-GPU (4 GPUs) Spark 64GB func cases with multinode support
+# ===============================================================================
+- condition:
+    ranges:
+      system_gpu_count:
+        gte: 4
+        lte: 4
+  tests:
+  - accuracy/test_llm_api_pytorch.py::TestQwen3_8_27B::test_nvfp4_4gpus
+  - accuracy/test_llm_api_pytorch.py::TestGPTOSS::test_w4_4gpus[v2_kv_cache-tp4-cutlass-auto]
