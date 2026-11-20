@@ -6379,12 +6379,16 @@ class TestQwen3_8_27B(LlmapiAccuracyTestHarness):
             assert_acceptance_length_for_llm("TestQwen3_8_27B::test_dflash2",
                                              llm)
 
-    def _evaluate_gsm8k(self, model_path, tensor_parallel_size=1):
+    def _evaluate_gsm8k(self,
+                        model_path: str,
+                        tensor_parallel_size: int = 1,
+                        pipeline_parallel_size: int = 1) -> None:
         kv_cache_config = KvCacheConfig(free_gpu_memory_fraction=0.7,
                                         enable_block_reuse=False)
         with LLM(model_path,
                  trust_remote_code=True,
                  tensor_parallel_size=tensor_parallel_size,
+                 pipeline_parallel_size=pipeline_parallel_size,
                  max_batch_size=32,
                  enable_chunked_prefill=True,
                  kv_cache_config=kv_cache_config,
@@ -6403,6 +6407,13 @@ class TestQwen3_8_27B(LlmapiAccuracyTestHarness):
     def test_nvfp4_2gpus(self):
         self._evaluate_gsm8k(f"{llm_models_root()}/Qwen3.8-27B-NVFP4",
                              tensor_parallel_size=2)
+
+    @skip_pre_blackwell
+    @pytest.mark.skip_less_mpi_world_size(3)
+    def test_nvfp4_3gpus_pp(self) -> None:
+        """Use PP=3; the model's 16 linear key heads cannot support TP=3."""
+        self._evaluate_gsm8k(f"{llm_models_root()}/Qwen3.8-27B-NVFP4",
+                             pipeline_parallel_size=3)
 
     @skip_pre_blackwell
     @pytest.mark.skip_less_mpi_world_size(4)
