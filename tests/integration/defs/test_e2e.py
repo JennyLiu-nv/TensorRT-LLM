@@ -781,6 +781,11 @@ def parse_output(text):
     pytest.param('Qwen3.6-35B-A3B-nvfp4',
                  'Qwen3.6-35B-A3B-NVFP4',
                  marks=skip_pre_blackwell),
+    pytest.param('Nemotron-3.5-Lightning-30B-nvfp4',
+                 'NVIDIA-Nemotron-3.5-Lightning-30B-A3B-NVFP4',
+                 marks=skip_pre_blackwell),
+    pytest.param(
+        'Qwen3.8-27B-nvfp4', 'Qwen3.8-27B-NVFP4', marks=skip_pre_blackwell),
     ("Nemotron-3-Nano-4B-bf16", "NVIDIA-Nemotron-3-Nano-4B-BF16"),
     pytest.param('Nemotron-3-Nano-4B-fp8',
                  'NVIDIA-Nemotron-3-Nano-4B-FP8',
@@ -808,8 +813,21 @@ def test_ptp_quickstart_advanced(llm_root, llm_venv, model_name, model_path):
             "--enable_chunked_prefill",
             f"--model_dir={llm_models_root()}/{model_path}",
         ]
-        if "Qwen3" in model_name:
+        if "Qwen3" in model_name or "Nemotron-3.5-Lightning" in model_name:
             cmds.append("--kv_cache_fraction=0.6")
+        if model_name.startswith(("Nemotron-3.5-Lightning", "Qwen3.8-27B")):
+            cmds.extend([
+                "--trust_remote_code",
+                "--disable_kv_cache_reuse",
+                "--max_batch_size=8",
+            ])
+        if "Nemotron-3.5-Lightning" in model_name:
+            cmds.extend([
+                "--moe_backend=CUTEDSL",
+                "--spec_decode_algo=MTP",
+                "--spec_decode_max_draft_len=3",
+                "--mamba_ssm_cache_dtype=float32",
+            ])
         if "Qwen3.6-35B-A3B" in model_name:
             # Hybrid linear-attention model: the Mamba cache preallocates a
             # recurrent state per sequence slot, so cap the batch size.

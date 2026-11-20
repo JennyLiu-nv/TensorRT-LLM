@@ -6329,7 +6329,6 @@ class TestQwen3_8_Flash_Next(LlmapiAccuracyTestHarness):
                         kv_cache_dtype="nvfp4")
 
 
-@pytest.mark.skip_less_device_memory(80000)
 class TestQwen3_8_27B(LlmapiAccuracyTestHarness):
     MODEL_NAME = "Qwen/Qwen3.8-27B"
     MODEL_PATH = f"{llm_models_root()}/Qwen3.8-27B"
@@ -6341,6 +6340,7 @@ class TestQwen3_8_27B(LlmapiAccuracyTestHarness):
     )
 
     @skip_pre_hopper
+    @pytest.mark.skip_less_device_memory(80000)
     @pytest.mark.parametrize("dflash_attention_backend", ["VANILLA"])
     def test_dflash2(self, dflash_attention_backend):
         """DFlash 2 drafter (incoai/Qwen3.8-27B-DFlash2) on its bf16 target.
@@ -6422,6 +6422,7 @@ class TestQwen3_8_27B(LlmapiAccuracyTestHarness):
                              tensor_parallel_size=4)
 
     @pytest.mark.skip_less_mpi_world_size(2)
+    @pytest.mark.skip_less_device_memory(80000)
     def test_auto_dtype_2gpus(self):
         self._evaluate_gsm8k(self.MODEL_PATH, tensor_parallel_size=2)
 
